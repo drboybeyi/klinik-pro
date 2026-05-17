@@ -1,6 +1,5 @@
 import { onAuthChange, logoutUser } from './firebase-config.js';
-import { setCurrentUser } from './db.js';
-import { startListeners, stopListeners, initDefaultData } from './db.js';
+import { setCurrentUser, startListeners, stopListeners, initDefaultData } from './db.js';
 import { showToast } from './components/toast.js';
 
 import { LoginView    } from './views/login.js';

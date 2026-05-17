@@ -1,0 +1,20 @@
+{
+  "name": "Klinik Pro",
+  "short_name": "Klinik Pro",
+  "description": "Klinik hasta takip ve karar destek sistemi",
+  "theme_color": "#8b6f47",
+  "background_color": "#f5ede0",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "start_url": "./",
+  "scope": "./",
+  "lang": "tr",
+  "icons": [
+    {
+      "src": "./assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

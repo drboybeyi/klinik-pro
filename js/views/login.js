@@ -1,4 +1,4 @@
-import { loginUser, registerUser } from '../firebase-config.js';
+import { loginUser, registerUser, getFirebaseErrorMessage } from '../firebase-config.js';
 
 export class LoginView {
   constructor() {
@@ -78,7 +78,7 @@ export class LoginView {
     } catch (err) {
       btn.disabled = false;
       btn.textContent = this._mode === 'login' ? 'Giriş Yap' : 'Kayıt Ol';
-      this._showError(this._parseError(err.code));
+      this._showError(getFirebaseErrorMessage(err));
     }
   }
 
@@ -92,16 +92,5 @@ export class LoginView {
     }
   }
 
-  _parseError(code) {
-    const map = {
-      'auth/user-not-found':      'Bu e-posta ile kayıtlı kullanıcı bulunamadı.',
-      'auth/wrong-password':      'Şifre hatalı.',
-      'auth/invalid-email':       'Geçersiz e-posta adresi.',
-      'auth/email-already-in-use':'Bu e-posta zaten kullanımda.',
-      'auth/weak-password':       'Şifre en az 6 karakter olmalı.',
-      'auth/too-many-requests':   'Çok fazla hatalı giriş. Lütfen bekle.',
-      'auth/invalid-credential':  'E-posta veya şifre hatalı.'
-    };
-    return map[code] || 'Bir hata oluştu. Tekrar dene.';
-  }
+
 }

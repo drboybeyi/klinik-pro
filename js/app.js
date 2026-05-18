@@ -1,6 +1,7 @@
 import { onAuthChange, logoutUser } from './firebase-config.js';
 import { setCurrentUser, startListeners, stopListeners, initDefaultData } from './db.js';
 import { showToast } from './components/toast.js';
+import { openHastaForm } from './components/hastaForm.js';
 
 import { LoginView    } from './views/login.js';
 import { DashboardView} from './views/dashboard.js';
@@ -121,7 +122,11 @@ updateHeaderDate();
 // --- FAB ---
 
 document.getElementById('fabBtn').addEventListener('click', () => {
-  showToast('v0.2\'de yeni hasta ekleme gelecek', 'info');
+  if (_currentView === 'hastalar') {
+    openHastaForm();
+  } else {
+    showToast('Hastalar sekmesinde hasta ekleyebilirsiniz', 'info');
+  }
 });
 
 // --- Nav clicks ---

@@ -1,7 +1,12 @@
 const _state = {
-  currentUser: null,
-  hastalar:    {},
-  ayarlar:     {}
+  currentUser:   null,
+  hastalar:      {},
+  tanilar:       {},
+  ilaclar:       {},
+  alerjiler:     {},
+  notlar:        {},
+  ayarlar:       {},
+  activeHastaId: null
 };
 
 const _subs = {};

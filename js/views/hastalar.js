@@ -1,4 +1,4 @@
-import { getState, subscribe } from '../state.js';
+﻿import { getState, subscribe } from '../state.js';
 import { seedHastalar } from '../db.js';
 import { openHastaDetay } from './hastaDetay.js';
 import { showToast } from '../components/toast.js';
@@ -36,7 +36,7 @@ export class HastalarView {
           <div class="empty-title">Henüz hasta yok</div>
           <div class="empty-sub">Sağ alttaki + butonu ile yeni hasta ekleyebilirsiniz.</div>
           <button class="btn btn-secondary" id="seedBtn" style="margin-top:20px">
-            📋 Örnek Hastaları Yükle (3 hasta)
+            📋 Örnek Hastaları Yükle (12 hasta)
           </button>
         </div>
       `;
@@ -130,11 +130,11 @@ export class HastalarView {
       btn.textContent = 'Yükleniyor…';
       try {
         await seedHastalar();
-        showToast('3 örnek hasta yüklendi', 'success');
+        showToast('12 örnek hasta yüklendi', 'success');
       } catch {
         showToast('Yükleme başarısız', 'error');
         btn.disabled = false;
-        btn.textContent = '📋 Örnek Hastaları Yükle (3 hasta)';
+        btn.textContent = '📋 Örnek Hastaları Yükle (12 hasta)';
       }
     });
   }

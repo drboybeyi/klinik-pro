@@ -136,37 +136,47 @@ export async function initDefaultData() {
 }
 
 // --- Seed ---
+// Idempotent: mevcut hastalar arasında aynı isim varsa skip eder
+// İlk yüklemede tüm 12 hastayı ekler; ikinci basışta sadece eksikleri ekler
 
 export async function seedHastalar() {
-  const snap = await get(userRef('hastalar'));
-  if (snap.exists() && Object.keys(snap.val()).length > 0) return;
-
   const now = new Date().toISOString();
+
+  // Mevcut hasta isimlerini topla
+  const snap = await get(userRef('hastalar'));
+  const mevcutIsimler = new Set();
+  if (snap.exists()) {
+    snap.forEach(child => {
+      const ad = (child.val().ad || '').trim().toLowerCase();
+      if (ad) mevcutIsimler.add(ad);
+    });
+  }
 
   const SEED = [
     {
       hasta: {
-        ad: 'S.İ.', yas: 89, cinsiyet: 'E', mrn: 'SI-89E',
-        klinikOzet: 'HFrEF EF %25-30, LVDD evre 3, asendan aort 3.9 cm, MY/TY orta, PABS 60. Plan: Coveram → 36sa washout → Entresto 24/26 2x1; 1. hafta Forxiga ekle. Cardura XL → Tamsulosin geçiş.'
+        ad: 'Selahattin İkisivri', yas: 89, cinsiyet: 'E', mrn: 'SI-89E',
+        klinikOzet: 'HFrEF EF %25-30, LVDD evre 3, asendan aort 3.9 cm, MY/TY orta, PABS 60. Plan: Coveram → 36sa washout → Entresto 24/26 2x1; 1. hafta Forxiga ekle. Cardura XL → Tamsulosin geçiş. Lab 06.05.26: BNP 817, Kr 0.56/GFR 98, K 4.1, Na 142, Hgb 12.7. 14.04.26: CRP 111.6, TropI 17.6. PSA 3.81 → üroloji şart.'
       },
       tanilar: [
-        { tanim: 'HFrEF EF %25-30',              seviye: 'kritik', icd: 'I50.21' },
-        { tanim: 'LVDD evre 3',                   seviye: 'kritik', icd: '' },
-        { tanim: 'Asendan aort dilatasyonu 3.9 cm', seviye: 'izlem', icd: '' },
-        { tanim: 'MY/TY orta',                    seviye: 'izlem', icd: '' },
-        { tanim: 'BPH PSA 3.81',                  seviye: 'izlem', icd: '' }
+        { tanim: 'HFrEF EF %25-30',                seviye: 'kritik', icd: 'I50.21' },
+        { tanim: 'LVDD evre 3',                    seviye: 'kritik', icd: '' },
+        { tanim: 'Asendan aort dilatasyonu 3.9 cm', seviye: 'izlem',  icd: '' },
+        { tanim: 'MY/TY orta',                     seviye: 'izlem',  icd: '' },
+        { tanim: 'BPH PSA 3.81',                   seviye: 'izlem',  icd: '' },
+        { tanim: 'Mikroalbüminüri',                seviye: 'izlem',  icd: '' }
       ],
       ilaclar: [
-        { ad: 'Coveram',   doz: '',       siklik: '',    endikasyon: 'HFrEF geçiş',   durum: 'kesilecek' },
-        { ad: 'Entresto',  doz: '24/26 mg', siklik: '2x1', endikasyon: 'HFrEF',       durum: 'aktif' },
-        { ad: 'Forxiga',   doz: '10 mg',  siklik: '1x1', endikasyon: 'HFrEF',         durum: 'planli' },
-        { ad: 'Tamsulosin',doz: '0.4 mg', siklik: '1x1', endikasyon: 'BPH',           durum: 'aktif' }
+        { ad: 'Coveram',    doz: '',         siklik: '',    endikasyon: 'HFrEF geçiş', durum: 'kesilecek' },
+        { ad: 'Entresto',   doz: '24/26 mg', siklik: '2x1', endikasyon: 'HFrEF',       durum: 'aktif' },
+        { ad: 'Forxiga',    doz: '10 mg',    siklik: '1x1', endikasyon: 'HFrEF',       durum: 'planli' },
+        { ad: 'Tamsulosin', doz: '0.4 mg',   siklik: '1x1', endikasyon: 'BPH',         durum: 'aktif' }
       ]
     },
     {
       hasta: {
-        ad: 'E.T.', yas: 68, cinsiyet: 'E', mrn: 'ET-68E',
-        klinikOzet: 'KOAH akut alevlenme. Foster + Avelox + Prednol 16 mg/gün. PA grafi: bilateral hiperinflasyon. Plan: Prednol 5-7 gün, moksifloksasin 5-7 gün, LAMA ekle, eozinofil+spirometri+AKG+NT-proBNP, LDCT tarama, aşılama, PE/KY DDx.'
+        ad: 'Ertuğrul Tüfekçi', yas: 68, cinsiyet: 'E', mrn: 'ET-68E',
+        klinikOzet: 'KOAH akut alevlenme. Foster + Avelox + Prednol 16 mg/gün. PA grafi 06.05.2026: bilateral hiperinflasyon, diyafragma düzleşmesi. Plan: Prednol 5-7 gün (GOLD 2025), moksifloksasin 5-7 gün, LAMA ekle (Trimbow/Trelegy), eozinofil + spirometri + AKG + NT-proBNP, LDCT tarama, aşılama, PE/KY DDx.'
       },
       tanilar: [
         { tanim: 'KOAH akut alevlenme', seviye: 'kritik', icd: 'J44.1' },
@@ -180,18 +190,145 @@ export async function seedHastalar() {
     },
     {
       hasta: {
-        ad: 'Ş.S.', yas: 60, cinsiyet: 'K', mrn: 'SS-60K',
-        klinikOzet: 'Yükselen Kromogranin A: Şubat 124 → Nisan 200 µg/L (%61↑, 7 hafta). PPI/H2RA yok. Plan: yalancı pozitif eleme (gastrin, eGFR, KCFT, TSH, anti-parietal Ab, B12, H.pylori), açlıkta 3. CgA tekrarı, klinik sorgulama (karsinoid, feo, MEN), 5-HIAA/metanefrin/NSE, üst GİS endoskopi, BT ± 68Ga-DOTATATE.'
+        ad: 'Şükriye Sönduk', yas: 60, cinsiyet: 'K', mrn: 'SS-60K',
+        klinikOzet: 'Yükselen Kromogranin A: 28.02.2026=124 → 16.04.2026=200 µg/L (%61↑, 7 haftada). PPI/H2RA yok. Plan: yalancı pozitif eleme (gastrin, eGFR, KCFT, TSH, anti-parietal Ab, B12, H.pylori), açlıkta 3. CgA tekrarı, klinik sorgulama (karsinoid, feo, MEN), 5-HIAA/metanefrin/NSE, üst GİS endoskopi, BT ± 68Ga-DOTATATE.'
       },
       tanilar: [
         { tanim: 'Yükselen Kromogranin A', seviye: 'izlem', icd: '' },
         { tanim: 'NET şüphesi workup',     seviye: 'izlem', icd: '' }
       ],
       ilaclar: []
+    },
+    {
+      hasta: {
+        ad: 'Türcihan Çelik', yas: 63, cinsiyet: 'K', mrn: 'TC-63K',
+        klinikOzet: 'Warfarin 20 yıl (unprovoke DVT). INR: 2.36→2.44→2.92. GFR: 50→46→40 (3 ayda -10, hızlı düşüş). BUN Mar.26=100.9. Hgb ~11.2 normositik. HbA1c 5.77, Albümin/Kr=24. Plan: APS paneli (LAC+aCL+anti-β2GPI+ANA+dsDNA+C3/C4) — warfarin notu şart. APS(-) ise apixaban 5 mg 2x1. GFR nedeni araştırılacak.'
+      },
+      tanilar: [
+        { tanim: 'Unprovoke DVT (20 yıl warfarin)', seviye: 'izlem',  icd: 'I82.4' },
+        { tanim: 'Hızlı GFR düşüşü (-10/3 ay)',     seviye: 'kritik', icd: '' },
+        { tanim: 'APS şüphesi workup',              seviye: 'izlem',  icd: '' }
+      ],
+      ilaclar: [
+        { ad: 'Warfarin', doz: '', siklik: '', endikasyon: 'Unprovoke DVT (INR hedef 2-3)', durum: 'aktif' }
+      ]
+    },
+    {
+      hasta: {
+        ad: 'Dursun Ağyüz', yas: 70, cinsiyet: 'E', mrn: 'DA-70E',
+        klinikOzet: 'KC siroz Child B (MELD-Na ~16). Aldacton 100, Lasix, Dideral, Duphalac. BT: makrolobülasyon + milimetrik hipodens odaklar (kontrastsız — HCC dışlanmadı). Anti-HBc IgG+, HBsAg−. Lab 01.05.2026: NH3 127, K 5.59, Cr 1.15/eGFR 61, LDH 299, Na 130, Alb 2.9, PLT 91. Bekleyen: AFP, kontrastlı KC MR/BT, HBV-DNA, rifaximin, aldacton revizyon, endoskopi.'
+      },
+      tanilar: [
+        { tanim: 'KC siroz Child B (MELD-Na 16)',      seviye: 'kritik', icd: 'K74.6' },
+        { tanim: 'HCC şüphesi (kontrastsız BT)',       seviye: 'kritik', icd: '' },
+        { tanim: 'Hiperamonyemi',                       seviye: 'izlem',  icd: '' },
+        { tanim: 'Hiperkalemi',                         seviye: 'izlem',  icd: '' }
+      ],
+      ilaclar: [
+        { ad: 'Aldacton', doz: '100 mg', siklik: '1x1', endikasyon: 'Asit',                  durum: 'aktif' },
+        { ad: 'Lasix',    doz: '',       siklik: '',    endikasyon: 'Asit',                  durum: 'aktif' },
+        { ad: 'Dideral',  doz: '',       siklik: '',    endikasyon: 'Variks profilaksisi',   durum: 'aktif' },
+        { ad: 'Duphalac', doz: '',       siklik: '',    endikasyon: 'Hepatik ensefalopati',  durum: 'aktif' }
+      ]
+    },
+    {
+      hasta: {
+        ad: 'Kerime Uysal', yas: 80, cinsiyet: 'K', mrn: 'KU-80K',
+        klinikOzet: 'Akut deliryum (zoopsi), halsizlik, ayak ödemi. Hgb 8.6/MCV 62.3/Ferritin 10.1 (DEA), hematüri, GFR 48 (AKI), K 3.37/Mg 1.05/P 2.5 (refrakter hipokalemi — Mg eksikliğine bağlı), CRP 62.3, AKŞ 267/HbA1c 5.7, metabolik alkaloz. Plan: yatış, Mg+K+P+tiamin, GİS endoskopi, BT ürografi + sistoskopi (ürotelyal Ca taraması), beyin BT, kültürler, ilaç sorgulaması, Lewy/Wernicke ayırıcı tanı.'
+      },
+      tanilar: [
+        { tanim: 'Akut deliryum (zoopsi)',           seviye: 'kritik', icd: 'F05' },
+        { tanim: 'Demir eksikliği anemisi (mikrositer)', seviye: 'kritik', icd: '' },
+        { tanim: 'AKI (GFR 48)',                     seviye: 'kritik', icd: '' },
+        { tanim: 'Hipomagnezemi + refrakter hipokalemi', seviye: 'kritik', icd: '' },
+        { tanim: 'Hematüri — ürotelyal Ca?',         seviye: 'izlem',  icd: '' }
+      ],
+      ilaclar: []
+    },
+    {
+      hasta: {
+        ad: 'Ömer Özel', yas: 50, cinsiyet: 'E', mrn: 'OO-50E',
+        klinikOzet: 'Biyokimyasal hipertiroidi: FT3 6.56, FT4 2.53, TSH 0.01. TRAb negatif, Anti-TPO negatif. USG: diffüz guatr, heterojen hipoekoik, nodül yok. MMI 20 mg/gün × 7 gün → yanıt yok. Tanı: Muhtemel Jod-Basedow veya sessiz tiroidit. Bekleyen: Doppler USG, Tiroglobulin, idrar iyot, IL-6, TRAb tekrarı.'
+      },
+      tanilar: [
+        { tanim: 'Hipertiroidi (TRAb negatif)', seviye: 'izlem', icd: 'E05.9' },
+        { tanim: 'Diffüz guatr',                 seviye: 'izlem', icd: '' }
+      ],
+      ilaclar: [
+        { ad: 'Metimazol', doz: '20 mg', siklik: '1x1', endikasyon: 'Hipertiroidi', durum: 'aktif' }
+      ]
+    },
+    {
+      hasta: {
+        ad: 'Nasiba Atag', yas: 33, cinsiyet: 'K', mrn: 'NA-33K',
+        klinikOzet: 'FMF + artralji, kolşisine yanıtlı. Lab 16.03.2026: ANA (FANA) POZİTİF 4+ nükleer benekli, Anti-dsDNA 78.17 (negatif <100), C4 0.13 düşük. ENA profili istendi. Romatoloji konsültasyonu planlandı.'
+      },
+      tanilar: [
+        { tanim: 'FMF',                                seviye: 'stabil', icd: 'E85.0' },
+        { tanim: 'ANA pozitif + düşük C4 (SLE şüphesi)', seviye: 'izlem', icd: '' }
+      ],
+      ilaclar: [
+        { ad: 'Kolşisin', doz: '0.5 mg', siklik: '2x1', endikasyon: 'FMF', durum: 'aktif' }
+      ]
+    },
+    {
+      hasta: {
+        ad: 'Deniz Korkmaz Önal', yas: 43, cinsiyet: 'K', mrn: 'DKO-43K',
+        klinikOzet: 'Lab 29.04.2026: PP2h 62, LDL 172, TotalKol 245, CRP 4.3, GFR 89, Hgb 13.4. Tanı: Reaktif hipoglisemi + hiperkolesterolemi. Eksik: OGTT+insülin, HbA1c, HOMA-IR. Plan: acarbose/statin değerlendirmesi.'
+      },
+      tanilar: [
+        { tanim: 'Reaktif hipoglisemi',  seviye: 'izlem', icd: '' },
+        { tanim: 'Hiperkolesterolemi',   seviye: 'izlem', icd: 'E78.0' }
+      ],
+      ilaclar: []
+    },
+    {
+      hasta: {
+        ad: 'Kazım Kısmöro', yas: 70, cinsiyet: 'E', mrn: 'KK-70E',
+        klinikOzet: 'T2DM + KBH (diyabetik nefropati). HbA1c 6.6, Krea 1.4, eGFR 50-55. Forxiga kullanıyor. Kerendia eklenmesi değerlendiriliyor: UACR ≥30, K+ ≤4.8, ACEi/ARB durumu doğrulanmalı. Uygunsa Kerendia 10 mg/gün → 4 hafta sonra titre.'
+      },
+      tanilar: [
+        { tanim: 'T2DM',                        seviye: 'stabil', icd: 'E11.9' },
+        { tanim: 'Diyabetik nefropati (KBH G3a)', seviye: 'izlem', icd: 'N18.3' }
+      ],
+      ilaclar: [
+        { ad: 'Forxiga', doz: '10 mg', siklik: '1x1', endikasyon: 'T2DM + KBH', durum: 'aktif' }
+      ]
+    },
+    {
+      hasta: {
+        ad: 'Arif Kaya', yas: 75, cinsiyet: 'E', mrn: 'AK-75E',
+        klinikOzet: 'Forxiga kullanıyor. Transferrin sat %27 (normal), Hgb 18, Htc 48. Sonuç: Demir eksikliği yok, tablo SGLT2i fizyolojisi. Yıllık takip önerildi.'
+      },
+      tanilar: [
+        { tanim: 'SGLT2i fizyolojisi — eritrositoz', seviye: 'stabil', icd: '' }
+      ],
+      ilaclar: [
+        { ad: 'Forxiga', doz: '10 mg', siklik: '1x1', endikasyon: 'T2DM', durum: 'aktif' }
+      ]
+    },
+    {
+      hasta: {
+        ad: 'Aydın Aydoğdu', yas: 75, cinsiyet: 'E', mrn: 'AA-75E',
+        klinikOzet: 'Prostat Ca takipli, bilateral nefrostomi, PCT 2.5, CRP ~150, ürosepsis ön tanısı. Meropenem (extended infusion) başlandı.'
+      },
+      tanilar: [
+        { tanim: 'Prostat Ca (takip)',       seviye: 'izlem',  icd: 'C61' },
+        { tanim: 'Bilateral nefrostomi',     seviye: 'izlem',  icd: '' },
+        { tanim: 'Ürosepsis (ön tanı)',      seviye: 'kritik', icd: '' }
+      ],
+      ilaclar: [
+        { ad: 'Meropenem', doz: '', siklik: '', endikasyon: 'Ürosepsis (extended infusion)', durum: 'aktif' }
+      ]
     }
   ];
 
+  let eklenenSayisi = 0;
   for (const item of SEED) {
+    const ad = (item.hasta.ad || '').trim().toLowerCase();
+    if (mevcutIsimler.has(ad)) continue; // duplicate skip
+    mevcutIsimler.add(ad);
+
     const hr = push(userRef('hastalar'));
     const hid = hr.key;
     await set(hr, { ...item.hasta, id: hid, olusturmaTarih: now });
@@ -205,5 +342,8 @@ export async function seedHastalar() {
       const ir = push(userRef('ilaclar'));
       await set(ir, { ...il, id: ir.key, hastaId: hid, tarih: now });
     }
+    eklenenSayisi++;
   }
+
+  return eklenenSayisi;
 }

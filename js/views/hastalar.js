@@ -8,6 +8,7 @@ let _unsubs  = [];
 
 export class HastalarView {
   render() {
+    const toplamHasta = Object.keys(getState('hastalar') || {}).length;
     return `
       <div class="view-container">
         <div class="arama-kutusu-wrap">
@@ -17,6 +18,14 @@ export class HastalarView {
                  value="${_search}" autocomplete="off" spellcheck="false">
           ${_search ? `<button class="arama-temizle" id="aramaTmz">✕</button>` : ''}
         </div>
+        ${toplamHasta > 0 ? `
+          <div style="display:flex;justify-content:flex-end;margin:-4px 0 8px">
+            <button id="seedUpdateBtn"
+                    style="background:none;border:none;color:var(--text-secondary);font-size:12px;cursor:pointer;padding:4px 8px;text-decoration:underline">
+              🔄 Örnekleri güncelle
+            </button>
+          </div>
+        ` : ''}
         <div id="hastaListeWrap">${this._renderList()}</div>
       </div>
     `;
@@ -123,19 +132,38 @@ export class HastalarView {
       el.addEventListener('click', () => openHastaDetay(el.dataset.hastaId));
     });
 
-    document.getElementById('seedBtn')?.addEventListener('click', async () => {
-      const btn = document.getElementById('seedBtn');
-      if (!btn) return;
-      btn.disabled = true;
-      btn.textContent = 'Yükleniyor…';
-      try {
-        await seedHastalar();
-        showToast('12 örnek hasta yüklendi', 'success');
-      } catch {
-        showToast('Yükleme başarısız', 'error');
-        btn.disabled = false;
-        btn.textContent = '📋 Örnek Hastaları Yükle (12 hasta)';
-      }
-    });
+    // Empty state'teki büyük "Örnek Hastaları Yükle" butonu
+    const seedBtn = document.getElementById('seedBtn');
+    if (seedBtn) {
+      seedBtn.addEventListener('click', () =>
+        this._runSeed(seedBtn, 'Yükleniyor…', '📋 Örnek Hastaları Yükle (12 hasta)'));
+    }
+
+    // Liste başlığındaki küçük "Örnekleri güncelle" linki (sadece >0 hasta varken)
+    const seedUpdateBtn = document.getElementById('seedUpdateBtn');
+    if (seedUpdateBtn) {
+      seedUpdateBtn.addEventListener('click', () =>
+        this._runSeed(seedUpdateBtn, '🔄 Güncelleniyor…', '🔄 Örnekleri güncelle'));
+    }
+  }
+
+  async _runSeed(btn, loadingText, defaultText) {
+    btn.disabled = true;
+    btn.textContent = loadingText;
+    try {
+      const { eklenen, guncellenen } = await seedHastalar();
+      let msg;
+      if (eklenen && guncellenen) msg = `${eklenen} yeni hasta eklendi, ${guncellenen} mevcut hasta güncellendi`;
+      else if (eklenen)           msg = `${eklenen} örnek hasta yüklendi`;
+      else if (guncellenen)       msg = `${guncellenen} hastaya semptom bilgisi eklendi`;
+      else                        msg = 'Tüm hastalar zaten güncel';
+      showToast(msg, 'success');
+      btn.disabled = false;
+      btn.textContent = defaultText;
+    } catch {
+      showToast('Yükleme başarısız', 'error');
+      btn.disabled = false;
+      btn.textContent = defaultText;
+    }
   }
 }

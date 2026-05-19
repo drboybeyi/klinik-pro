@@ -29,7 +29,7 @@ Türk klinisyenler için mobil-first, PWA tabanlı hasta takip ve karar destek s
 
 **Hasta Detay Overlay (sağdan slide-in)**
 - Header: geri ← butonu, hasta adı, ⋯ menü (Düzenle / Sil)
-- 3 top-tab: **Özet** / **Lab** (v0.3) / **Notlar**
+- 3 top-tab: **Özet** / **Semptomlar** / **Notlar**
 - **Özet sekmesi:**
   - Demografi grid (yaş/cinsiyet, MRN, telefon)
   - Klinik özet bandı (turuncu sol border)
@@ -37,6 +37,11 @@ Türk klinisyenler için mobil-first, PWA tabanlı hasta takip ve karar destek s
   - İlaçlar — durum badge: `aktif` / `kesilecek` / `planlı`, doz · sıklık · endikasyon
   - Alerjiler — ajan + reaksiyon
   - Her listede + ekle, ✏️ düzenle, 🗑️ sil
+- **Semptomlar sekmesi (v0.3.2.a):**
+  - 5 kart: 📋 Başvuru Şikayetleri · 📖 Hikaye (HPI) · 📜 Özgeçmiş · 👪 Soygeçmiş · 🩺 Fizik Muayene
+  - Boş kart: "Henüz girilmedi" + **Düzenle**
+  - Dolu kart: ilk 200 karakter önizleme + **Tamamını Gör / Düzenle**
+  - Tıklayınca tam ekran modal — büyük textarea + Kaydet/İptal
 - **Notlar sekmesi:**
   - SOAP not listesi (yeni → eski)
   - S / O / A / P dört textarea, tarih + tip (vizit/telefon/lab)

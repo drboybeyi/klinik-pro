@@ -8,7 +8,10 @@ Türk klinisyenler için mobil-first, PWA tabanlı hasta takip ve karar destek s
 |-----|--------|-------|
 | v0.1-iskelet | PWA shell, design system, auth, 5-view routing | ✅ Tamamlandı |
 | v0.2-hasta | Hasta CRUD, detay overlay, SOAP notları, tanı/ilaç/alerji, 3 seed hasta | ✅ Tamamlandı |
-| v0.3-lab | 60+ parametre, referans aralık, 4-seviye flagger, trend grafik | 🔜 |
+| v0.3.2.a-semptom | Semptomlar sekmesi (5 kart, modal düzenleyici) | ✅ |
+| v0.3.2.b-tetkik | Tetkikler sekmesi (jenerik metin) → v0.3.3'te koleksiyona göç etti | ✅ |
+| v0.3.3-tetkik-kayit | Tetkik koleksiyonu + Firebase Storage dosya ekleri | ✅ |
+| v0.3-lab-yapilandirilmis | 60+ parametre, referans aralık, 4-seviye flagger, trend grafik | 🔜 |
 | v0.4-skor | 17 hesaplayıcı (CHA₂DS₂-VASc, CKD-EPI 2021, MELD-Na, Wells…) | 🔜 |
 | v0.5-rehber | Decision tree motoru, HFrEF/KOAH/T2DM+KBH/FMF algoritmaları | 🔜 |
 | v0.6-AI | Claude API + DDx asistanı + hasta özetleme + ilaç sorgu | 🔜 |
@@ -39,12 +42,13 @@ Türk klinisyenler için mobil-first, PWA tabanlı hasta takip ve karar destek s
   - Her listede + ekle, ✏️ düzenle, 🗑️ sil
 - **Semptomlar sekmesi (v0.3.2.a):**
   - 5 kart: 📋 Başvuru Şikayetleri · 📖 Hikaye (HPI) · 📜 Özgeçmiş · 👪 Soygeçmiş · 🩺 Fizik Muayene
-- **Tetkikler sekmesi (v0.3.2.b):**
-  - 3 kart: 🧪 Laboratuvar · 🩻 Görüntüleme · 📈 Diğer Tetkikler
-- Semptomlar ve Tetkikler ortak pattern (jenerik metin-kartı):
-  - Boş kart: "Henüz girilmedi" + **Düzenle**
-  - Dolu kart: ilk 200 karakter önizleme + **Tamamını Gör / Düzenle**
-  - Tıklayınca tam ekran modal — büyük textarea + Kaydet/İptal
+  - Boş kart: "Henüz girilmedi" + **Düzenle**; doluda 200 karakter önizleme + **Tamamını Gör / Düzenle** → modal textarea
+- **Tetkikler sekmesi (v0.3.3):**
+  - Tetkik kayıtları koleksiyon listesi — tarih (yeni → eski), **kritikler en üstte**
+  - Her tetkik: tarih + tür badge'i (🩸 kan, 🧫 idrar, 📡 USG, 🧲 MR, 🩻 BT, ☢️ röntgen, 💓 EKG, 💗 eko, 🔬 endoskopi/kolonoskopi, 🧬 patoloji, 📋 diğer)
+  - Tıklayınca expand olur — özet metni + dosya ekleri
+  - "+ Yeni Tetkik" → form modal: tür, tarih, başlık, özet, kritik flag, **dosya yükleme** (PDF/JPG/PNG/WEBP, max 10 MB, 5 dosya)
+  - Dosyalar **Firebase Storage**'da saklanır; tetkik veya hasta silinince Storage dosyaları da silinir
 - **Notlar sekmesi:**
   - SOAP not listesi (yeni → eski)
   - S / O / A / P dört textarea, tarih + tip (vizit/telefon/lab)
@@ -52,12 +56,21 @@ Türk klinisyenler için mobil-first, PWA tabanlı hasta takip ve karar destek s
 
 **Veri Modeli (Firebase RTDB)**
 ```
-/users/{uid}/hastalar/{id}   — ad, yas, cinsiyet, mrn, telefon, klinikOzet
+/users/{uid}/hastalar/{id}   — ad, yas, cinsiyet, mrn, telefon, klinikOzet,
+                                sikayetler, hikaye, ozgecmis, soygecmis, fmBulgular
 /users/{uid}/tanilar/{id}    — hastaId, tanim, seviye, icd
 /users/{uid}/ilaclar/{id}    — hastaId, ad, doz, siklik, endikasyon, durum
 /users/{uid}/alerjiler/{id}  — hastaId, ajan, reaksiyon
 /users/{uid}/notlar/{id}     — hastaId, tarih, tip, S, O, A, P
+/users/{uid}/tetkikler/{id}  — hastaId, tarih, tur, baslik, ozet, kritik,
+                                dosyalar[{ad, url, path, boyut, tip, yuklemeTarihi}]
 ```
+
+**Firebase Storage**
+```
+/users/{uid}/tetkikler/{hastaId}/{timestamp}-{filename}
+```
+Storage güvenlik kuralı: kullanıcı yalnızca kendi `users/{uid}/...` altındaki dosyalara erişebilir.
 
 **Seed hastaları (3/12 — kalan 9'u sonraki turda):**
 - S.İ. 89E — HFrEF EF %25-30, 5 tanı, 4 ilaç (Entresto/Forxiga geçiş)

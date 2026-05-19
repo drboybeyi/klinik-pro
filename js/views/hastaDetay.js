@@ -1,15 +1,16 @@
 import { getState, subscribe } from '../state.js';
 import {
   deleteHastaWithRelated, saveAlerji, deleteAlerji,
-  deleteTani, deleteIlac, deleteNot, updateHasta
+  deleteTani, deleteIlac, deleteNot, deleteTetkik, updateHasta
 } from '../db.js';
-import { openHastaForm }  from '../components/hastaForm.js';
-import { openTaniForm }   from '../components/taniForm.js';
-import { openIlacForm }   from '../components/ilacForm.js';
-import { openNotForm }    from '../components/notForm.js';
-import { confirm }        from '../components/modal.js';
-import { showToast }      from '../components/toast.js';
-import { formatTarih }    from '../utils.js';
+import { openHastaForm }   from '../components/hastaForm.js';
+import { openTaniForm }    from '../components/taniForm.js';
+import { openIlacForm }    from '../components/ilacForm.js';
+import { openNotForm }     from '../components/notForm.js';
+import { openTetkikForm }  from '../components/tetkikForm.js';
+import { confirm }         from '../components/modal.js';
+import { showToast }       from '../components/toast.js';
+import { formatTarih }     from '../utils.js';
 
 const SEMPTOM_FIELDS = [
   { key: 'sikayetler', label: 'Başvuru Şikayetleri', icon: '📋' },
@@ -19,16 +20,23 @@ const SEMPTOM_FIELDS = [
   { key: 'fmBulgular', label: 'Fizik Muayene',       icon: '🩺' }
 ];
 
-const TETKIK_FIELDS = [
-  { key: 'laboratuvar',    label: 'Laboratuvar',     icon: '🧪' },
-  { key: 'goruntuleme',    label: 'Görüntüleme',     icon: '🩻' },
-  { key: 'digerTetkikler', label: 'Diğer Tetkikler', icon: '📈' }
-];
+const METIN_ALAN_MAP = new Map(SEMPTOM_FIELDS.map(f => [f.key, f]));
 
-// Birleşik lookup — modal editör herhangi bir metin alanını key ile çözebilsin
-const METIN_ALAN_MAP = new Map(
-  [...SEMPTOM_FIELDS, ...TETKIK_FIELDS].map(f => [f.key, f])
-);
+// Tetkik türü → kategori + etiket (badge rengi tur-{kat} sınıfı ile)
+const TETKIK_TUR = {
+  kan:         { label: '🩸 Kan',         kat: 'lab'    },
+  idrar:       { label: '🧫 İdrar',       kat: 'lab'    },
+  usg:         { label: '📡 USG',         kat: 'rad'    },
+  mr:          { label: '🧲 MR',          kat: 'rad'    },
+  bt:          { label: '🩻 BT',          kat: 'rad'    },
+  rontgen:     { label: '☢️ Röntgen',     kat: 'rad'    },
+  ekg:         { label: '💓 EKG',         kat: 'cardio' },
+  echo:        { label: '💗 Eko',         kat: 'cardio' },
+  endoskopi:   { label: '🔬 Endoskopi',   kat: 'gastro' },
+  kolonoskopi: { label: '🔬 Kolonoskopi', kat: 'gastro' },
+  patoloji:    { label: '🧬 Patoloji',    kat: 'pato'   },
+  diger:       { label: '📋 Diğer',       kat: 'diger'  }
+};
 
 let _overlay  = null;
 let _hastaId  = null;
@@ -58,12 +66,12 @@ function _mount() {
       _refreshHeader();
       _refreshOzetTab();
       _refreshMetinTab('hdPanelSemptomlar', SEMPTOM_FIELDS);
-      _refreshMetinTab('hdPanelTetkikler',  TETKIK_FIELDS);
     }),
-    subscribe('tanilar',   () => _refreshSection('hdTanilarList', _renderTanilarList)),
-    subscribe('ilaclar',   () => _refreshSection('hdIlaclarList', _renderIlaclarList)),
-    subscribe('alerjiler', () => _refreshSection('hdAlerjiList',  _renderAlerjiList)),
-    subscribe('notlar',    () => _refreshSection('hdNotlarList',  _renderNotlarList))
+    subscribe('tanilar',   () => _refreshSection('hdTanilarList',  _renderTanilarList)),
+    subscribe('ilaclar',   () => _refreshSection('hdIlaclarList',  _renderIlaclarList)),
+    subscribe('alerjiler', () => _refreshSection('hdAlerjiList',   _renderAlerjiList)),
+    subscribe('notlar',    () => _refreshSection('hdNotlarList',   _renderNotlarList)),
+    subscribe('tetkikler', () => _refreshSection('hdTetkiklerList', _renderTetkiklerList))
   ];
 }
 
@@ -87,6 +95,13 @@ function _tanilar()       { return _items('tanilar').sort((a,b) => _sevOrd(a.sev
 function _ilaclar()       { return _items('ilaclar'); }
 function _alerjiler()     { return _items('alerjiler'); }
 function _notlar()        { return _items('notlar').sort((a,b) => (b.tarih||'').localeCompare(a.tarih||'')); }
+function _tetkikler()     {
+  // Kritikler en üstte; sonra tarih yeni → eski
+  return _items('tetkikler').sort((a, b) => {
+    if (!!b.kritik - !!a.kritik) return !!b.kritik - !!a.kritik;
+    return (b.tarih || '').localeCompare(a.tarih || '');
+  });
+}
 function _sevOrd(s)       { return {kritik:0,izlem:1,stabil:2}[s] ?? 1; }
 
 // --- Full build ---
@@ -118,7 +133,7 @@ function _buildAll() {
     <div class="hasta-detay-body">
       <div id="hdPanelOzet"       style="display:${_aktifTab==='ozet'       ?'block':'none'}">${_renderOzetPanel(hasta)}</div>
       <div id="hdPanelSemptomlar" style="display:${_aktifTab==='semptomlar' ?'block':'none'}">${_renderMetinPanel(hasta, SEMPTOM_FIELDS)}</div>
-      <div id="hdPanelTetkikler"  style="display:${_aktifTab==='tetkikler'  ?'block':'none'}">${_renderMetinPanel(hasta, TETKIK_FIELDS)}</div>
+      <div id="hdPanelTetkikler"  style="display:${_aktifTab==='tetkikler'  ?'block':'none'}">${_renderTetkiklerPanel()}</div>
       <div id="hdPanelNotlar"     style="display:${_aktifTab==='notlar'     ?'block':'none'}">${_renderNotlarPanel()}</div>
     </div>
   `;
@@ -218,6 +233,18 @@ function _renderNotlarPanel() {
   `;
 }
 
+function _renderTetkiklerPanel() {
+  return `
+    <div class="view-container">
+      <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+        <button class="btn btn-primary" id="hdTetkikEkle"
+                style="min-height:36px;padding:8px 16px;font-size:13px">+ Yeni Tetkik</button>
+      </div>
+      <div id="hdTetkiklerList">${_renderTetkiklerList()}</div>
+    </div>
+  `;
+}
+
 // --- List renderers ---
 
 function _renderTanilarList() {
@@ -278,6 +305,66 @@ function _renderAlerjiList() {
       </div>
     </div>
   `).join('');
+}
+
+function _renderTetkiklerList() {
+  const list = _tetkikler();
+  if (!list.length) return `
+    <div class="empty-state" style="padding:40px 0">
+      <div class="empty-icon">🧪</div>
+      <div class="empty-title">Henüz tetkik yok</div>
+      <div class="empty-sub">Lab, görüntüleme, EKG vb. kayıtlar burada görünecek</div>
+    </div>
+  `;
+  return list.map(t => {
+    const meta = TETKIK_TUR[t.tur] || TETKIK_TUR.diger;
+    const dosyalar = t.dosyalar || [];
+    return `
+      <div class="tetkik-kart ${t.kritik ? 'kritik' : ''}" data-tetkik-id="${t.id}">
+        <div class="tetkik-kart-header">
+          <div class="tetkik-kart-meta">
+            <span class="tetkik-kart-tarih">${formatTarih(t.tarih)}</span>
+            <span class="badge tur-${meta.kat}">${meta.label}</span>
+            ${t.kritik ? '<span class="kritik-flag" title="Kritik">🔴</span>' : ''}
+            ${dosyalar.length ? `<span class="tetkik-dosya-sayi" title="${dosyalar.length} dosya">📎 ${dosyalar.length}</span>` : ''}
+          </div>
+          <div style="display:flex;gap:6px;align-items:center">
+            <button class="icon-btn"        data-edit-tetkik="${t.id}" title="Düzenle">✏️</button>
+            <button class="icon-btn danger" data-del-tetkik="${t.id}"  title="Sil">🗑️</button>
+            <span class="soap-chevron">›</span>
+          </div>
+        </div>
+        <div class="tetkik-kart-baslik">${t.baslik || ''}</div>
+        <div class="tetkik-kart-body">
+          ${t.ozet ? `<div class="tetkik-ozet">${t.ozet}</div>` : ''}
+          ${dosyalar.length ? `
+            <div class="tetkik-dosyalar">
+              ${dosyalar.map(d => `
+                <a class="tetkik-dosya-link" href="${d.url}" target="_blank" rel="noopener">
+                  <span class="dosya-icon">${_dosyaIcon(d.tip)}</span>
+                  <span class="dosya-ad">${d.ad}</span>
+                  <span class="dosya-boyut">${_formatBoyut(d.boyut)}</span>
+                </a>
+              `).join('')}
+            </div>
+          ` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function _dosyaIcon(tip) {
+  if (tip?.startsWith('image/')) return '🖼️';
+  if (tip === 'application/pdf') return '📄';
+  return '📎';
+}
+
+function _formatBoyut(b) {
+  if (!b && b !== 0) return '';
+  if (b < 1024)        return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  return `${(b / 1024 / 1024).toFixed(1)} MB`;
 }
 
 function _renderNotlarList() {
@@ -353,21 +440,34 @@ function _attachListeners() {
   document.getElementById('hdNotEkle')?.addEventListener('click', () =>
     openNotForm(_hastaId, null));
 
-  // Event delegation — tanı/ilaç/alerji/not edit+delete
+  document.getElementById('hdTetkikEkle')?.addEventListener('click', () =>
+    openTetkikForm(_hastaId, null));
+
+  // Event delegation — tanı/ilaç/alerji/not/tetkik edit+delete
   _overlay.addEventListener('click', _handleDelegated);
 
-  // SOAP kart toggle
+  // SOAP + tetkik kart toggle (expand/collapse)
   _overlay.addEventListener('click', e => {
-    const kart = e.target.closest('.soap-kart');
-    const header = e.target.closest('.soap-kart-header');
-    if (kart && header && !e.target.closest('[data-del-not]')) {
-      kart.classList.toggle('expanded');
+    if (e.target.closest('button') || e.target.closest('a')) return;
+
+    const soap = e.target.closest('.soap-kart');
+    if (soap && e.target.closest('.soap-kart-header')) {
+      soap.classList.toggle('expanded');
+      return;
+    }
+    const tetkik = e.target.closest('.tetkik-kart');
+    if (tetkik && e.target.closest('.tetkik-kart-header')) {
+      tetkik.classList.toggle('expanded');
     }
   });
 }
 
 function _handleDelegated(e) {
-  const el = e.target.closest('[data-edit-tani],[data-del-tani],[data-edit-ilac],[data-del-ilac],[data-del-alerji],[data-del-not],[data-edit-metin]');
+  const el = e.target.closest(
+    '[data-edit-tani],[data-del-tani],[data-edit-ilac],[data-del-ilac],' +
+    '[data-del-alerji],[data-del-not],[data-edit-metin],' +
+    '[data-edit-tetkik],[data-del-tetkik]'
+  );
   if (!el) return;
   e.stopPropagation();
 
@@ -387,6 +487,11 @@ function _handleDelegated(e) {
     _confirmDelete('notu', () => deleteNot(el.dataset.delNot), 'Not silindi');
   } else if (el.dataset.editMetin) {
     _openMetinEditor(el.dataset.editMetin);
+  } else if (el.dataset.editTetkik) {
+    const t = _tetkikler().find(x => x.id === el.dataset.editTetkik);
+    if (t) openTetkikForm(_hastaId, t);
+  } else if (el.dataset.delTetkik) {
+    _confirmDelete('tetkiki', () => deleteTetkik(el.dataset.delTetkik), 'Tetkik silindi');
   }
 }
 
@@ -414,8 +519,9 @@ function _switchTab(tab) {
     if (panel) panel.style.display = name === tab ? 'block' : 'none';
   });
   // Re-attach listeners for the newly shown panel
-  if (tab === 'ozet')   _attachOzetListeners();
-  if (tab === 'notlar') _attachNotlarListeners();
+  if (tab === 'ozet')      _attachOzetListeners();
+  if (tab === 'notlar')    _attachNotlarListeners();
+  if (tab === 'tetkikler') _attachTetkiklerListeners();
 }
 
 function _capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
@@ -460,6 +566,10 @@ function _attachOzetListeners() {
 
 function _attachNotlarListeners() {
   document.getElementById('hdNotEkle')?.addEventListener('click', () => openNotForm(_hastaId, null));
+}
+
+function _attachTetkiklerListeners() {
+  document.getElementById('hdTetkikEkle')?.addEventListener('click', () => openTetkikForm(_hastaId, null));
 }
 
 // --- Inline Alerji Modal ---

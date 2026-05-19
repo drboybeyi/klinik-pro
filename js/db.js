@@ -1,7 +1,10 @@
-import { db } from './firebase-config.js';
+import { db, storage } from './firebase-config.js';
 import {
   ref, set, get, push, update, remove, onValue, off
 } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-database.js';
+import {
+  ref as storageRef, uploadBytesResumable, getDownloadURL, deleteObject
+} from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-storage.js';
 import { setState } from './state.js';
 
 let _uid = null;
@@ -14,7 +17,7 @@ function userRef(path) { return ref(db, `users/${_uid}/${path}`); }
 // --- Listeners ---
 
 export function startListeners() {
-  ['hastalar', 'tanilar', 'ilaclar', 'alerjiler', 'notlar', 'ayarlar']
+  ['hastalar', 'tanilar', 'ilaclar', 'alerjiler', 'notlar', 'tetkikler', 'ayarlar']
     .forEach(_listen);
 }
 
@@ -42,13 +45,20 @@ export async function updateHasta(id, data) {
 }
 
 export async function deleteHastaWithRelated(hastaId) {
-  const cols = ['tanilar', 'ilaclar', 'alerjiler', 'notlar'];
+  const cols = ['tanilar', 'ilaclar', 'alerjiler', 'notlar', 'tetkikler'];
   const deletes = [remove(userRef(`hastalar/${hastaId}`))];
   for (const col of cols) {
     const snap = await get(userRef(col));
     if (snap.exists()) {
       snap.forEach(child => {
-        if (child.val().hastaId === hastaId) {
+        const v = child.val();
+        if (v.hastaId === hastaId) {
+          // Tetkik silinirken yüklü Storage dosyalarını da temizle (best-effort)
+          if (col === 'tetkikler') {
+            for (const d of (v.dosyalar || [])) {
+              if (d.path) deletes.push(deleteTetkikDosya(d.path).catch(() => {}));
+            }
+          }
           deletes.push(remove(userRef(`${col}/${child.key}`)));
         }
       });
@@ -121,6 +131,72 @@ export async function deleteNot(id) {
   await remove(userRef(`notlar/${id}`));
 }
 
+// --- Tetkik CRUD + Storage ---
+
+export async function saveTetkik(data) {
+  if (data.id) {
+    await update(userRef(`tetkikler/${data.id}`), data);
+    return data.id;
+  }
+  const r = push(userRef('tetkikler'));
+  await set(r, { ...data, id: r.key, olusturmaTarih: new Date().toISOString() });
+  return r.key;
+}
+
+export async function deleteTetkik(id) {
+  // Önce dosyaları Storage'tan sil (best-effort), sonra RTDB kaydını sil
+  const snap = await get(userRef(`tetkikler/${id}`));
+  if (snap.exists()) {
+    const dosyalar = snap.val().dosyalar || [];
+    await Promise.all(dosyalar.map(d =>
+      d.path ? deleteTetkikDosya(d.path).catch(() => {}) : Promise.resolve()
+    ));
+  }
+  await remove(userRef(`tetkikler/${id}`));
+}
+
+function _safeFileName(name) {
+  return name.replace(/[^\w.\-]+/g, '_').slice(0, 80);
+}
+
+/**
+ * Storage'a dosya yükler ve progress callback'i çağırır.
+ * @returns {Promise<{ad, url, path, boyut, tip, yuklemeTarihi}>}
+ */
+export function uploadTetkikDosya(file, hastaId, onProgress) {
+  return new Promise((resolve, reject) => {
+    if (!_uid) return reject(new Error('Oturum yok'));
+    const path = `users/${_uid}/tetkikler/${hastaId}/${Date.now()}-${_safeFileName(file.name)}`;
+    const r = storageRef(storage, path);
+    const task = uploadBytesResumable(r, file, { contentType: file.type });
+
+    task.on('state_changed',
+      snap => onProgress?.((snap.bytesTransferred / snap.totalBytes) * 100),
+      err  => reject(err),
+      async () => {
+        const url = await getDownloadURL(task.snapshot.ref);
+        resolve({
+          ad: file.name,
+          url,
+          path,
+          boyut: file.size,
+          tip: file.type || 'application/octet-stream',
+          yuklemeTarihi: new Date().toISOString()
+        });
+      }
+    );
+  });
+}
+
+export async function deleteTetkikDosya(path) {
+  try {
+    await deleteObject(storageRef(storage, path));
+  } catch (e) {
+    // Dosya yoksa sessizce geç; diğer hatalarda fırlat
+    if (e.code !== 'storage/object-not-found') throw e;
+  }
+}
+
 // --- Ayarlar ---
 
 export async function saveAyarlar(data) {
@@ -137,27 +213,37 @@ export async function initDefaultData() {
 
 // --- Seed ---
 // Idempotent: aynı isimli hasta varsa hasta/tanı/ilaç ekleme yapmaz,
-// ancak SEED'de yeni eklenmiş serbest-metin alanları varsa ve mevcut hastada
-// o alan boşsa geriye dönük backfill eder (kullanıcının elle girdiklerini ezmez).
-// Semptomlar (v0.3.2.a) + Tetkikler (v0.3.2.b) hep bu listeden geçer.
+// ancak SEED'deki serbest-metin alanları için backfill yapar (boş olanları doldurur,
+// elle girilenleri ezmez). Ayrıca v0.3.2.b'de hasta objesi içinde tutulan
+// laboratuvar/goruntuleme/digerTetkikler alanları artık `tetkikler/` koleksiyonuna
+// taşındığı için seed çalışırken bu ölü alanlar mevcut kayıtlardan temizlenir.
 
-const METIN_ALAN_KEYS = [
-  // Semptomlar
-  'sikayetler', 'hikaye', 'ozgecmis', 'soygecmis', 'fmBulgular',
-  // Tetkikler
-  'laboratuvar', 'goruntuleme', 'digerTetkikler'
-];
+const SEMPTOM_KEYS = ['sikayetler', 'hikaye', 'ozgecmis', 'soygecmis', 'fmBulgular'];
+const ESKI_TETKIK_KEYS = ['laboratuvar', 'goruntuleme', 'digerTetkikler']; // v0.3.2.b → v0.3.3 migration
 
 export async function seedHastalar() {
   const now = new Date().toISOString();
 
-  const snap = await get(userRef('hastalar'));
+  const [hSnap, tSnap] = await Promise.all([
+    get(userRef('hastalar')),
+    get(userRef('tetkikler'))
+  ]);
+
   const mevcutMap = new Map();
-  if (snap.exists()) {
-    snap.forEach(child => {
+  if (hSnap.exists()) {
+    hSnap.forEach(child => {
       const v = child.val();
       const ad = (v.ad || '').trim().toLowerCase();
       if (ad) mevcutMap.set(ad, { id: child.key, data: v });
+    });
+  }
+
+  // Her hasta için kayıtlı tetkik sayısı (idempotent ekleme için)
+  const tetkikSayisi = new Map();
+  if (tSnap.exists()) {
+    tSnap.forEach(child => {
+      const hid = child.val().hastaId;
+      if (hid) tetkikSayisi.set(hid, (tetkikSayisi.get(hid) || 0) + 1);
     });
   }
 
@@ -188,6 +274,12 @@ export async function seedHastalar() {
         { ad: 'Entresto',   doz: '24/26 mg', siklik: '2x1', endikasyon: 'HFrEF',       durum: 'aktif' },
         { ad: 'Forxiga',    doz: '10 mg',    siklik: '1x1', endikasyon: 'HFrEF',       durum: 'planli' },
         { ad: 'Tamsulosin', doz: '0.4 mg',   siklik: '1x1', endikasyon: 'BPH',         durum: 'aktif' }
+      ],
+      tetkikler: [
+        { tarih: '2026-05-06', tur: 'kan',  baslik: 'Tam biyokimya + NT-proBNP', ozet: 'NT-proBNP 817 ↑, Kreatinin 0.56 / eGFR 98, K 4.1, Na 142, Hgb 12.7', kritik: false },
+        { tarih: '2026-04-14', tur: 'kan',  baslik: 'Akut faz + troponin',       ozet: 'CRP 111.6 ↑, Troponin I 17.6 ↑. PSA 3.81 — üroloji konsültasyonu planlandı', kritik: true },
+        { tarih: '2026-05-01', tur: 'echo', baslik: 'Ekokardiyografi',           ozet: 'EF %25-30, LVDD evre 3, MY/TY orta, PABS 60 mmHg. Asendan aort 3.9 cm (dilatasyon, yıllık takip)', kritik: true },
+        { tarih: '2026-04-14', tur: 'ekg',  baslik: 'EKG + PA grafi',            ozet: 'EKG: sinüs ritmi, ileti bozukluğu yok. PA grafi: kardiyomegali (+), aktif pulmoner konjesyon yok', kritik: false }
       ]
     },
     {
@@ -211,6 +303,11 @@ export async function seedHastalar() {
         { ad: 'Foster inhaler',          doz: '',       siklik: '2x1', endikasyon: 'KOAH',           durum: 'aktif' },
         { ad: 'Avelox (moksifloksasin)', doz: '400 mg', siklik: '1x1', endikasyon: 'KOAH alevlenme', durum: 'aktif' },
         { ad: 'Prednol',                 doz: '16 mg',  siklik: '1x1', endikasyon: 'KOAH alevlenme', durum: 'aktif' }
+      ],
+      tetkikler: [
+        { tarih: '2026-05-06', tur: 'rontgen', baslik: 'PA akciğer grafi',      ozet: 'Bilateral hiperinflasyon, diyafragma düzleşmesi, akut konsolidasyon yok',        kritik: false },
+        { tarih: '2026-05-08', tur: 'kan',     baslik: 'Atak paneli (CRP)',     ozet: 'Bekleyen: tam kan eozinofil sayımı, NT-proBNP, AKG. CRP gönderildi',           kritik: false },
+        { tarih: '2026-05-15', tur: 'diger',   baslik: 'Spirometri (planlı)',   ozet: 'Post-tedavi spirometri planlandı. Pnömokok ve grip aşıları eksik — planda',    kritik: false }
       ]
     },
     {
@@ -230,7 +327,12 @@ export async function seedHastalar() {
         { tanim: 'Yükselen Kromogranin A', seviye: 'izlem', icd: '' },
         { tanim: 'NET şüphesi workup',     seviye: 'izlem', icd: '' }
       ],
-      ilaclar: []
+      ilaclar: [],
+      tetkikler: [
+        { tarih: '2026-04-16', tur: 'kan',   baslik: 'Kromogranin A (kontrol)', ozet: 'CgA 200 µg/L (28.02.2026=124 → 16.04.2026=200, %61 artış, 7 hafta). Plan: açlıkta 3. CgA tekrarı', kritik: true },
+        { tarih: '2026-05-10', tur: 'diger', baslik: 'NET workup paneli',       ozet: 'İstemler: gastrin, eGFR, KCFT, TSH, anti-parietal Ab, B12, H.pylori, 24 saat idrar 5-HIAA, plazma/idrar metanefrin, NSE',                       kritik: false },
+        { tarih: '2026-05-20', tur: 'bt',    baslik: 'Abdominal BT (planlı)',   ozet: 'Üst GİS endoskopi planlandı. Abdominal BT ± 68Ga-DOTATATE PET değerlendirmeye alındı',                                                          kritik: false }
+      ]
     },
     {
       hasta: {
@@ -252,6 +354,11 @@ export async function seedHastalar() {
       ],
       ilaclar: [
         { ad: 'Warfarin', doz: '', siklik: '', endikasyon: 'Unprovoke DVT (INR hedef 2-3)', durum: 'aktif' }
+      ],
+      tetkikler: [
+        { tarih: '2026-05-05', tur: 'kan', baslik: 'INR + böbrek paneli', ozet: 'INR 2.92 ↑, eGFR 40 (3 ayda 10 puan kayıp). BUN 100.9 ↑. Hgb ~11.2, HbA1c 5.77',                       kritik: true  },
+        { tarih: '2026-05-08', tur: 'kan', baslik: 'APS paneli',          ozet: 'LAC + aCL + anti-β2GPI + ANA + dsDNA + C3/C4 istendi — warfarin notu eklendi',                          kritik: false },
+        { tarih: '2026-05-12', tur: 'usg', baslik: 'Renal USG (planlı)',  ozet: 'Renal USG planlandı (hızlı eGFR düşüşü etyolojisi)',                                                    kritik: false }
       ]
     },
     {
@@ -278,6 +385,11 @@ export async function seedHastalar() {
         { ad: 'Lasix',    doz: '',       siklik: '',    endikasyon: 'Asit',                  durum: 'aktif' },
         { ad: 'Dideral',  doz: '',       siklik: '',    endikasyon: 'Variks profilaksisi',   durum: 'aktif' },
         { ad: 'Duphalac', doz: '',       siklik: '',    endikasyon: 'Hepatik ensefalopati',  durum: 'aktif' }
+      ],
+      tetkikler: [
+        { tarih: '2026-05-01', tur: 'kan',       baslik: 'KC paneli + NH3',         ozet: 'NH3 127 ↑, K 5.59 ↑, Kreatinin 1.15/eGFR 61, LDH 299, Na 130 ↓, Albümin 2.9 ↓, PLT 91 ↓. HBsAg negatif, Anti-HBc IgG pozitif', kritik: true  },
+        { tarih: '2026-04-25', tur: 'bt',        baslik: 'Abdominal BT (kontrastsız)', ozet: 'Makrolobülasyon + milimetrik hipodens odaklar — HCC ekarte edilemedi. Plan: kontrastlı KC MR veya dinamik BT',           kritik: true  },
+        { tarih: '2026-05-15', tur: 'endoskopi', baslik: 'Üst GİS endoskopi (planlı)', ozet: 'Özofagus varis taraması bekleniyor',                                                                                       kritik: false }
       ]
     },
     {
@@ -300,7 +412,13 @@ export async function seedHastalar() {
         { tanim: 'Hipomagnezemi + refrakter hipokalemi', seviye: 'kritik', icd: '' },
         { tanim: 'Hematüri — ürotelyal Ca?',         seviye: 'izlem',  icd: '' }
       ],
-      ilaclar: []
+      ilaclar: [],
+      tetkikler: [
+        { tarih: '2026-05-12', tur: 'kan',   baslik: 'Acil panel',          ozet: 'Hgb 8.6 / MCV 62.3 / Ferritin 10.1 (DEA). eGFR 48 (AKI). K 3.37, Mg 1.05, P 2.5 (refrakter hipokalemi). CRP 62.3 ↑. AKŞ 267, HbA1c 5.7. Metabolik alkaloz', kritik: true },
+        { tarih: '2026-05-13', tur: 'idrar', baslik: 'İdrar analizi + kültür', ozet: 'Hematüri (+). İdrar kültürü gönderildi. Kan kültürleri de alındı',                                                                                                kritik: true },
+        { tarih: '2026-05-14', tur: 'bt',    baslik: 'Beyin BT (planlı)',   ozet: 'Akut deliryum etyolojisi. BT ürografi + sistoskopi: ürotelyal Ca taraması (hematüri)',                                                                                  kritik: false },
+        { tarih: '2026-05-14', tur: 'ekg',   baslik: 'EKG',                 ozet: 'Sinüs ritmi, QTc normal',                                                                                                                                              kritik: false }
+      ]
     },
     {
       hasta: {
@@ -321,6 +439,10 @@ export async function seedHastalar() {
       ],
       ilaclar: [
         { ad: 'Metimazol', doz: '20 mg', siklik: '1x1', endikasyon: 'Hipertiroidi', durum: 'aktif' }
+      ],
+      tetkikler: [
+        { tarih: '2026-04-15', tur: 'kan', baslik: 'Tiroid fonksiyon',    ozet: 'FT3 6.56 ↑, FT4 2.53 ↑, TSH 0.01 ↓. TRAb negatif, Anti-TPO negatif',                                                          kritik: false },
+        { tarih: '2026-04-18', tur: 'usg', baslik: 'Tiroid USG',          ozet: 'Diffüz guatr, heterojen hipoekoik parankim, nodül yok. Plan: Doppler USG (Graves vs sessiz tiroidit ayırıcısı)',             kritik: false }
       ]
     },
     {
@@ -342,6 +464,9 @@ export async function seedHastalar() {
       ],
       ilaclar: [
         { ad: 'Kolşisin', doz: '0.5 mg', siklik: '2x1', endikasyon: 'FMF', durum: 'aktif' }
+      ],
+      tetkikler: [
+        { tarih: '2026-03-16', tur: 'kan', baslik: 'Otoimmün panel', ozet: 'ANA (FANA) 4+ nükleer benekli, Anti-dsDNA 78.17 (sınırın hemen altında), C4 0.13 ↓, C3 normal. ENA profili istendi. MEFV mutasyonu pozitif (eski kayıt)', kritik: true }
       ]
     },
     {
@@ -361,7 +486,10 @@ export async function seedHastalar() {
         { tanim: 'Reaktif hipoglisemi',  seviye: 'izlem', icd: '' },
         { tanim: 'Hiperkolesterolemi',   seviye: 'izlem', icd: 'E78.0' }
       ],
-      ilaclar: []
+      ilaclar: [],
+      tetkikler: [
+        { tarih: '2026-04-29', tur: 'kan', baslik: 'Glukoz + lipid paneli', ozet: 'PP2h 62 ↓, LDL 172 ↑, Total kolesterol 245 ↑, CRP 4.3, eGFR 89, Hgb 13.4. Eksik: OGTT + insülin, HbA1c, HOMA-IR, TSH', kritik: false }
+      ]
     },
     {
       hasta: {
@@ -382,6 +510,10 @@ export async function seedHastalar() {
       ],
       ilaclar: [
         { ad: 'Forxiga', doz: '10 mg', siklik: '1x1', endikasyon: 'T2DM + KBH', durum: 'aktif' }
+      ],
+      tetkikler: [
+        { tarih: '2026-05-01', tur: 'kan',   baslik: 'Diyabet + böbrek paneli',   ozet: 'HbA1c 6.6, Kreatinin 1.4, eGFR 50-55 (KBH G3a). UACR ≥30. Bekleyen: tekrar K+ ölçümü (Kerendia eklemesi öncesi)', kritik: false },
+        { tarih: '2025-11-15', tur: 'diger', baslik: 'Diyabetik retinopati taraması', ozet: 'Göz dibi muayenesi normal. Monofilament testi normal — nöropati taraması temiz',                                       kritik: false }
       ]
     },
     {
@@ -402,6 +534,9 @@ export async function seedHastalar() {
       ],
       ilaclar: [
         { ad: 'Forxiga', doz: '10 mg', siklik: '1x1', endikasyon: 'T2DM', durum: 'aktif' }
+      ],
+      tetkikler: [
+        { tarih: '2026-05-02', tur: 'kan', baslik: 'Tam kan + demir profili', ozet: 'Hgb 18, Htc 48. Transferrin satürasyonu %27 (normal). Ferritin normal. Demir eksikliği yok — tablo SGLT2i fizyolojisi ile uyumlu', kritik: false }
       ]
     },
     {
@@ -424,37 +559,62 @@ export async function seedHastalar() {
       ],
       ilaclar: [
         { ad: 'Meropenem', doz: '', siklik: '', endikasyon: 'Ürosepsis (extended infusion)', durum: 'aktif' }
+      ],
+      tetkikler: [
+        { tarih: '2026-05-14', tur: 'kan', baslik: 'Sepsis paneli + kültür', ozet: 'PCT 2.5 ↑, CRP ~150 ↑. Kan, idrar ve nefrostomi kültürleri gönderildi. Kreatinin ve elektrolitler yakın izlemde', kritik: true  },
+        { tarih: '2026-05-14', tur: 'ekg', baslik: 'EKG',                    ozet: 'Sinüs taşikardi (sepsiste, KH ~112)',                                                                              kritik: false },
+        { tarih: '2026-05-15', tur: 'usg', baslik: 'Nefrostomi kontrol USG', ozet: 'Bilateral nefrostomi kateterleri açık görünümde. Kemik sintigrafisi takibi planlandı',                            kritik: false }
       ]
     }
   ];
 
+  // Yeni hasta objesinde v0.3.2.b'nin 3 ölü alanı kalmasın — SEED'i yazarken çıkar
+  const sterilHasta = h => {
+    const o = { ...h };
+    for (const k of ESKI_TETKIK_KEYS) delete o[k];
+    return o;
+  };
+
   let eklenen = 0;
   let guncellenen = 0;
+  let tetkikEklenen = 0;
 
   for (const item of SEED) {
     const ad = (item.hasta.ad || '').trim().toLowerCase();
     const mevcut = mevcutMap.get(ad);
 
     if (mevcut) {
-      // Mevcut hastayı çoğaltma; sadece SEED'de değer olup mevcut kayıtta
-      // boş olan serbest-metin alanlarını ekle (elle girilenleri ezme).
+      // 1) Mevcut hastada boş semptom alanlarını backfill et (elle girileni ezme)
+      //    + v0.3.2.b'den kalan 3 ölü alanı temizle (laboratuvar/goruntuleme/digerTetkikler)
       const patch = {};
-      for (const key of METIN_ALAN_KEYS) {
+      for (const key of SEMPTOM_KEYS) {
         const mevcutVal = (mevcut.data?.[key] || '').trim();
         const seedVal   = (item.hasta?.[key] || '').trim();
         if (!mevcutVal && seedVal) patch[key] = item.hasta[key];
+      }
+      for (const key of ESKI_TETKIK_KEYS) {
+        if (mevcut.data?.[key] !== undefined) patch[key] = null; // RTDB'de null = sil
       }
       if (Object.keys(patch).length) {
         await update(userRef(`hastalar/${mevcut.id}`), patch);
         guncellenen++;
       }
+
+      // 2) Bu hasta için henüz tetkik kaydı yoksa SEED tetkiklerini ekle
+      if ((tetkikSayisi.get(mevcut.id) || 0) === 0) {
+        for (const tt of (item.tetkikler || [])) {
+          const tr = push(userRef('tetkikler'));
+          await set(tr, { ...tt, id: tr.key, hastaId: mevcut.id, olusturmaTarih: now });
+          tetkikEklenen++;
+        }
+      }
       continue;
     }
 
-    // Yeni hasta + ilişkili kayıtlar
+    // Yeni hasta + ilişkili kayıtlar (tetkikler dahil)
     const hr = push(userRef('hastalar'));
     const hid = hr.key;
-    await set(hr, { ...item.hasta, id: hid, olusturmaTarih: now });
+    await set(hr, { ...sterilHasta(item.hasta), id: hid, olusturmaTarih: now });
 
     for (const t of item.tanilar) {
       const tr = push(userRef('tanilar'));
@@ -465,8 +625,15 @@ export async function seedHastalar() {
       const ir = push(userRef('ilaclar'));
       await set(ir, { ...il, id: ir.key, hastaId: hid, tarih: now });
     }
+
+    for (const tt of (item.tetkikler || [])) {
+      const tr = push(userRef('tetkikler'));
+      await set(tr, { ...tt, id: tr.key, hastaId: hid, olusturmaTarih: now });
+      tetkikEklenen++;
+    }
+
     eklenen++;
   }
 
-  return { eklenen, guncellenen };
+  return { eklenen, guncellenen, tetkikEklenen };
 }

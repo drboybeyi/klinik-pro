@@ -151,16 +151,17 @@ export class HastalarView {
     btn.disabled = true;
     btn.textContent = loadingText;
     try {
-      const { eklenen, guncellenen } = await seedHastalar();
-      let msg;
-      if (eklenen && guncellenen) msg = `${eklenen} yeni hasta eklendi, ${guncellenen} mevcut hasta güncellendi`;
-      else if (eklenen)           msg = `${eklenen} örnek hasta yüklendi`;
-      else if (guncellenen)       msg = `${guncellenen} hastaya semptom bilgisi eklendi`;
-      else                        msg = 'Tüm hastalar zaten güncel';
+      const { eklenen, guncellenen, tetkikEklenen } = await seedHastalar();
+      const parts = [];
+      if (eklenen)       parts.push(`${eklenen} yeni hasta`);
+      if (guncellenen)   parts.push(`${guncellenen} hasta güncellendi`);
+      if (tetkikEklenen) parts.push(`${tetkikEklenen} tetkik eklendi`);
+      const msg = parts.length ? parts.join(' · ') : 'Tüm hastalar zaten güncel';
       showToast(msg, 'success');
       btn.disabled = false;
       btn.textContent = defaultText;
-    } catch {
+    } catch (e) {
+      console.error('Seed başarısız:', e);
       showToast('Yükleme başarısız', 'error');
       btn.disabled = false;
       btn.textContent = defaultText;

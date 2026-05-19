@@ -47,6 +47,20 @@
   --lab-normal-bg:       #f0f5eb;
   --warning-amber:       #c9923c;
   --critical-red:        #9a4a3a;
+
+  /* --- Tetkik türü kategorileri (v0.3.3) --- */
+  --tetkik-lab-bg:    #f0f5eb;   /* yeşil */
+  --tetkik-lab-fg:    #2a7a5a;
+  --tetkik-rad-bg:    #e8eef8;   /* mavi */
+  --tetkik-rad-fg:    #3a5a85;
+  --tetkik-cardio-bg: #fff0ee;   /* kırmızı */
+  --tetkik-cardio-fg: #9a4a3a;
+  --tetkik-gastro-bg: #fff3e0;   /* turuncu */
+  --tetkik-gastro-fg: #b06b1f;
+  --tetkik-pato-bg:   #f1ebf8;   /* mor */
+  --tetkik-pato-fg:   #6b4ba0;
+  --tetkik-diger-bg:  #ede4d0;   /* gri-bej */
+  --tetkik-diger-fg:  #6b4f3a;
 }
 
 /* ============================================================
@@ -1294,6 +1308,168 @@ body {
   color: var(--text-primary);
   line-height: 1.55;
   white-space: pre-wrap;
+}
+
+/* ============================================================
+   Tetkik Kart (v0.3.3)
+   ============================================================ */
+.tetkik-kart {
+  background: #fff;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  margin-bottom: 10px;
+  overflow: hidden;
+  position: relative;
+}
+
+.tetkik-kart.kritik { border-left: 4px solid var(--danger); }
+
+.tetkik-kart-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px 6px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  gap: 8px;
+}
+
+.tetkik-kart-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.tetkik-kart-tarih {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.kritik-flag       { font-size: 12px; }
+.tetkik-dosya-sayi {
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--bg-secondary);
+  padding: 2px 6px;
+  border-radius: 8px;
+}
+
+.tetkik-kart-baslik {
+  padding: 0 14px 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.35;
+}
+
+.tetkik-kart-body {
+  display: none;
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--border);
+}
+
+.tetkik-kart.expanded .tetkik-kart-body { display: block; }
+.tetkik-kart.expanded .soap-chevron     { transform: rotate(90deg); }
+
+.tetkik-ozet {
+  font-size: 14px;
+  color: var(--text-primary);
+  line-height: 1.55;
+  white-space: pre-wrap;
+}
+
+.tetkik-dosyalar {
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.tetkik-dosya-link {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  text-decoration: none;
+  color: var(--text-primary);
+  font-size: 13px;
+  border: 1px solid var(--border);
+  transition: background 120ms;
+}
+
+.tetkik-dosya-link:hover { background: var(--bg-primary); }
+
+.tetkik-dosya-link .dosya-ad {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.tetkik-dosya-link .dosya-boyut {
+  font-size: 11px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+/* Tetkik türü badge renkleri */
+.tur-lab    { background: var(--tetkik-lab-bg);    color: var(--tetkik-lab-fg);    }
+.tur-rad    { background: var(--tetkik-rad-bg);    color: var(--tetkik-rad-fg);    }
+.tur-cardio { background: var(--tetkik-cardio-bg); color: var(--tetkik-cardio-fg); }
+.tur-gastro { background: var(--tetkik-gastro-bg); color: var(--tetkik-gastro-fg); }
+.tur-pato   { background: var(--tetkik-pato-bg);   color: var(--tetkik-pato-fg);   }
+.tur-diger  { background: var(--tetkik-diger-bg);  color: var(--tetkik-diger-fg);  }
+
+/* Tetkik form — mevcut dosya satırı (silinecek işaretli) */
+.dosya-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  font-size: 13px;
+  margin-bottom: 6px;
+}
+
+.dosya-item.silinecek {
+  background: #fff0ee;
+  border-color: var(--danger);
+  opacity: 0.75;
+}
+
+.dosya-item.silinecek .dosya-ad { text-decoration: line-through; }
+
+.dosya-item .dosya-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.dosya-item .dosya-ad {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+
+.dosya-item .dosya-ad:hover { text-decoration: underline; }
+
+.dosya-item .dosya-boyut {
+  font-size: 11px;
+  color: var(--text-secondary);
 }
 
 /* ============================================================

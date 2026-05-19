@@ -5,6 +5,7 @@ const _state = {
   ilaclar:       {},
   alerjiler:     {},
   notlar:        {},
+  tetkikler:     {},
   ayarlar:       {},
   activeHastaId: null
 };

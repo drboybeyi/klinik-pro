@@ -19,6 +19,17 @@ const SEMPTOM_FIELDS = [
   { key: 'fmBulgular', label: 'Fizik Muayene',       icon: '🩺' }
 ];
 
+const TETKIK_FIELDS = [
+  { key: 'laboratuvar',    label: 'Laboratuvar',     icon: '🧪' },
+  { key: 'goruntuleme',    label: 'Görüntüleme',     icon: '🩻' },
+  { key: 'digerTetkikler', label: 'Diğer Tetkikler', icon: '📈' }
+];
+
+// Birleşik lookup — modal editör herhangi bir metin alanını key ile çözebilsin
+const METIN_ALAN_MAP = new Map(
+  [...SEMPTOM_FIELDS, ...TETKIK_FIELDS].map(f => [f.key, f])
+);
+
 let _overlay  = null;
 let _hastaId  = null;
 let _aktifTab = 'ozet';
@@ -43,7 +54,12 @@ function _mount() {
   requestAnimationFrame(() => _overlay.classList.add('open'));
 
   _unsubs = [
-    subscribe('hastalar',  () => { _refreshHeader(); _refreshOzetTab(); _refreshSemptomlarTab(); }),
+    subscribe('hastalar',  () => {
+      _refreshHeader();
+      _refreshOzetTab();
+      _refreshMetinTab('hdPanelSemptomlar', SEMPTOM_FIELDS);
+      _refreshMetinTab('hdPanelTetkikler',  TETKIK_FIELDS);
+    }),
     subscribe('tanilar',   () => _refreshSection('hdTanilarList', _renderTanilarList)),
     subscribe('ilaclar',   () => _refreshSection('hdIlaclarList', _renderIlaclarList)),
     subscribe('alerjiler', () => _refreshSection('hdAlerjiList',  _renderAlerjiList)),
@@ -95,12 +111,14 @@ function _buildAll() {
     <div class="top-tabs" id="hdTabs">
       <div class="top-tab ${_aktifTab==='ozet'       ? 'active':''}" data-tab="ozet">Özet</div>
       <div class="top-tab ${_aktifTab==='semptomlar' ? 'active':''}" data-tab="semptomlar">Semptomlar</div>
+      <div class="top-tab ${_aktifTab==='tetkikler'  ? 'active':''}" data-tab="tetkikler">Tetkikler</div>
       <div class="top-tab ${_aktifTab==='notlar'     ? 'active':''}" data-tab="notlar">Notlar</div>
     </div>
 
     <div class="hasta-detay-body">
       <div id="hdPanelOzet"       style="display:${_aktifTab==='ozet'       ?'block':'none'}">${_renderOzetPanel(hasta)}</div>
-      <div id="hdPanelSemptomlar" style="display:${_aktifTab==='semptomlar' ?'block':'none'}">${_renderSemptomlarPanel(hasta)}</div>
+      <div id="hdPanelSemptomlar" style="display:${_aktifTab==='semptomlar' ?'block':'none'}">${_renderMetinPanel(hasta, SEMPTOM_FIELDS)}</div>
+      <div id="hdPanelTetkikler"  style="display:${_aktifTab==='tetkikler'  ?'block':'none'}">${_renderMetinPanel(hasta, TETKIK_FIELDS)}</div>
       <div id="hdPanelNotlar"     style="display:${_aktifTab==='notlar'     ?'block':'none'}">${_renderNotlarPanel()}</div>
     </div>
   `;
@@ -160,15 +178,15 @@ function _renderOzetPanel(hasta) {
   `;
 }
 
-function _renderSemptomlarPanel(hasta) {
+function _renderMetinPanel(hasta, fields) {
   return `
     <div class="view-container">
-      ${SEMPTOM_FIELDS.map(f => _renderSemptomKart(f, hasta?.[f.key] || '')).join('')}
+      ${fields.map(f => _renderMetinKart(f, hasta?.[f.key] || '')).join('')}
     </div>
   `;
 }
 
-function _renderSemptomKart(field, value) {
+function _renderMetinKart(field, value) {
   const v = (value || '').trim();
   const dolu = v.length > 0;
   const kisaltilmis = dolu && v.length > 200 ? v.slice(0, 200).trim() + '…' : v;
@@ -177,7 +195,7 @@ function _renderSemptomKart(field, value) {
     <div class="card" style="margin-bottom:12px">
       <div class="section-header">
         <span class="section-title">${field.icon} ${field.label}</span>
-        <button class="btn btn-secondary" data-edit-semptom="${field.key}"
+        <button class="btn btn-secondary" data-edit-metin="${field.key}"
                 style="min-height:30px;padding:5px 12px;font-size:12px">${linkLabel}</button>
       </div>
       ${dolu
@@ -349,7 +367,7 @@ function _attachListeners() {
 }
 
 function _handleDelegated(e) {
-  const el = e.target.closest('[data-edit-tani],[data-del-tani],[data-edit-ilac],[data-del-ilac],[data-del-alerji],[data-del-not],[data-edit-semptom]');
+  const el = e.target.closest('[data-edit-tani],[data-del-tani],[data-edit-ilac],[data-del-ilac],[data-del-alerji],[data-del-not],[data-edit-metin]');
   if (!el) return;
   e.stopPropagation();
 
@@ -367,8 +385,8 @@ function _handleDelegated(e) {
     _confirmDelete('alerjiyi', () => deleteAlerji(el.dataset.delAlerji), 'Alerji silindi');
   } else if (el.dataset.delNot) {
     _confirmDelete('notu', () => deleteNot(el.dataset.delNot), 'Not silindi');
-  } else if (el.dataset.editSemptom) {
-    _openSemptomEditor(el.dataset.editSemptom);
+  } else if (el.dataset.editMetin) {
+    _openMetinEditor(el.dataset.editMetin);
   }
 }
 
@@ -391,7 +409,7 @@ function _switchTab(tab) {
   _aktifTab = tab;
   _overlay.querySelectorAll('.top-tab').forEach(t =>
     t.classList.toggle('active', t.dataset.tab === tab));
-  ['ozet', 'semptomlar', 'notlar'].forEach(name => {
+  ['ozet', 'semptomlar', 'tetkikler', 'notlar'].forEach(name => {
     const panel = document.getElementById(`hdPanel${_capitalize(name)}`);
     if (panel) panel.style.display = name === tab ? 'block' : 'none';
   });
@@ -420,12 +438,12 @@ function _refreshOzetTab() {
   _attachOzetListeners();
 }
 
-function _refreshSemptomlarTab() {
+function _refreshMetinTab(panelId, fields) {
   const h = _hasta();
   if (!h) return;
-  const panel = document.getElementById('hdPanelSemptomlar');
+  const panel = document.getElementById(panelId);
   if (!panel) return;
-  panel.innerHTML = _renderSemptomlarPanel(h);
+  panel.innerHTML = _renderMetinPanel(h, fields);
 }
 
 function _refreshSection(containerId, renderFn) {
@@ -492,10 +510,10 @@ function _openAlerjiForm(alerji) {
   setTimeout(() => document.getElementById('afAjan')?.focus(), 320);
 }
 
-// --- Semptom editör modal ---
+// --- Metin alanı editör modal (semptom + tetkik ortak) ---
 
-function _openSemptomEditor(fieldKey) {
-  const field = SEMPTOM_FIELDS.find(f => f.key === fieldKey);
+function _openMetinEditor(fieldKey) {
+  const field = METIN_ALAN_MAP.get(fieldKey);
   if (!field) return;
   const hasta = _hasta();
   const currentValue = hasta?.[fieldKey] || '';
@@ -506,38 +524,38 @@ function _openSemptomEditor(fieldKey) {
     <div class="modal-box">
       <div class="modal-header">
         <span class="modal-title">${field.icon} ${field.label}</span>
-        <button class="modal-close" id="seClose">✕</button>
+        <button class="modal-close" id="meClose">✕</button>
       </div>
       <div class="form-group">
-        <textarea id="seTextarea" class="form-control" rows="10"
+        <textarea id="meTextarea" class="form-control" rows="10"
                   style="resize:vertical;min-height:220px;font-family:inherit;line-height:1.5"
                   placeholder="${field.label} bilgisini buraya yazın…"></textarea>
       </div>
       <div class="modal-footer">
-        <button class="btn btn-secondary" id="seIptal">İptal</button>
-        <button class="btn btn-primary"   id="seKaydet">Kaydet</button>
+        <button class="btn btn-secondary" id="meIptal">İptal</button>
+        <button class="btn btn-primary"   id="meKaydet">Kaydet</button>
       </div>
     </div>
   `;
   document.body.appendChild(ov);
   // Textarea içeriği DOM içine string interpolation ile değil, value ile yerleştir (HTML escape ihtiyacını ortadan kaldırır)
-  ov.querySelector('#seTextarea').value = currentValue;
+  ov.querySelector('#meTextarea').value = currentValue;
 
   requestAnimationFrame(() => ov.classList.add('open'));
 
-  const closeSe = () => { ov.classList.remove('open'); setTimeout(() => ov.remove(), 300); };
-  ov.addEventListener('click', e => { if (e.target === ov) closeSe(); });
-  document.getElementById('seClose').addEventListener('click', closeSe);
-  document.getElementById('seIptal').addEventListener('click', closeSe);
-  document.getElementById('seKaydet').addEventListener('click', async () => {
-    const btn = document.getElementById('seKaydet');
-    const yeniMetin = document.getElementById('seTextarea').value;
+  const closeMe = () => { ov.classList.remove('open'); setTimeout(() => ov.remove(), 300); };
+  ov.addEventListener('click', e => { if (e.target === ov) closeMe(); });
+  document.getElementById('meClose').addEventListener('click', closeMe);
+  document.getElementById('meIptal').addEventListener('click', closeMe);
+  document.getElementById('meKaydet').addEventListener('click', async () => {
+    const btn = document.getElementById('meKaydet');
+    const yeniMetin = document.getElementById('meTextarea').value;
     btn.disabled = true; btn.textContent = 'Kaydediliyor…';
     await updateHasta(_hastaId, { [fieldKey]: yeniMetin });
     showToast('Kaydedildi', 'success');
-    closeSe();
+    closeMe();
   });
-  setTimeout(() => document.getElementById('seTextarea')?.focus(), 320);
+  setTimeout(() => document.getElementById('meTextarea')?.focus(), 320);
 }
 
 // --- Label helpers ---

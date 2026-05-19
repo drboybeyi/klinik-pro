@@ -137,10 +137,16 @@ export async function initDefaultData() {
 
 // --- Seed ---
 // Idempotent: aynı isimli hasta varsa hasta/tanı/ilaç ekleme yapmaz,
-// ancak SEED'de yeni eklenmiş semptom alanları varsa ve mevcut hastada
+// ancak SEED'de yeni eklenmiş serbest-metin alanları varsa ve mevcut hastada
 // o alan boşsa geriye dönük backfill eder (kullanıcının elle girdiklerini ezmez).
+// Semptomlar (v0.3.2.a) + Tetkikler (v0.3.2.b) hep bu listeden geçer.
 
-const SEMPTOM_KEYS = ['sikayetler', 'hikaye', 'ozgecmis', 'soygecmis', 'fmBulgular'];
+const METIN_ALAN_KEYS = [
+  // Semptomlar
+  'sikayetler', 'hikaye', 'ozgecmis', 'soygecmis', 'fmBulgular',
+  // Tetkikler
+  'laboratuvar', 'goruntuleme', 'digerTetkikler'
+];
 
 export async function seedHastalar() {
   const now = new Date().toISOString();
@@ -164,7 +170,10 @@ export async function seedHastalar() {
         hikaye: '3 ay önce dekompanze KY ile yatış. Coveram başlandı. Son 2 hafta ilerleyen ortopne ve bilateral pretibial ödem. NT-proBNP 817 (artmış).',
         ozgecmis: 'Hipertansiyon 15 yıl, KAH 8 yıl, BPH 5 yıl. PCI 2020. Asetilsalisilik asit, statin kullanıyor.',
         soygecmis: 'Baba 65y MI nedeniyle ex. Erkek kardeş HT.',
-        fmBulgular: 'TA 118/72, KH 88, SS 22/dk. Akciğer bazallerde ince raller. S3 duyuluyor. Bilateral 2+ pretibial ödem. JVD belirgin (10 cm).'
+        fmBulgular: 'TA 118/72, KH 88, SS 22/dk. Akciğer bazallerde ince raller. S3 duyuluyor. Bilateral 2+ pretibial ödem. JVD belirgin (10 cm).',
+        laboratuvar: '06.05.2026: NT-proBNP 817 ↑, Kreatinin 0.56 / eGFR 98, K 4.1, Na 142, Hgb 12.7. 14.04.2026: CRP 111.6 ↑, Troponin I 17.6 ↑. PSA 3.81 — üroloji konsültasyonu planlandı.',
+        goruntuleme: 'Ekokardiyografi: EF %25-30, LVDD evre 3, MY/TY orta, PABS 60 mmHg. Asendan aort 3.9 cm (dilatasyon, yıllık takip).',
+        digerTetkikler: 'EKG: sinüs ritmi, ileti bozukluğu yok. PA grafi: kardiyomegali (+), aktif pulmoner konjesyon bulgusu yok.'
       },
       tanilar: [
         { tanim: 'HFrEF EF %25-30',                seviye: 'kritik', icd: 'I50.21' },
@@ -189,7 +198,10 @@ export async function seedHastalar() {
         hikaye: '20 paket-yıl sigara öyküsü. 4 yıldır KOAH tanılı. Son alevlenme 8 ay önce.',
         ozgecmis: 'KOAH GOLD evre 3. HT yok, DM yok. Aşıları eksik (pnömokok, grip).',
         soygecmis: 'Anne KOAH, baba AC Ca (sigara).',
-        fmBulgular: 'TA 130/80, KH 102, SS 26/dk, SpO2 oda havası 89%. Bilateral yaygın ronküs ve wheezing. Aksesuar kas kullanımı +.'
+        fmBulgular: 'TA 130/80, KH 102, SS 26/dk, SpO2 oda havası 89%. Bilateral yaygın ronküs ve wheezing. Aksesuar kas kullanımı +.',
+        laboratuvar: 'Bekleyen: tam kan eozinofil sayımı, NT-proBNP, arter kan gazı. Atak için CRP gönderildi. Serum elektrolitleri normal sınırlarda.',
+        goruntuleme: 'PA grafi 06.05.2026: bilateral hiperinflasyon, diyafragma düzleşmesi, akut konsolidasyon yok. LDCT akciğer tarama (sigara öyküsü) planlandı.',
+        digerTetkikler: 'Spirometri post-tedavi planlandı. Pnömokok ve grip aşıları eksik — planda.'
       },
       tanilar: [
         { tanim: 'KOAH akut alevlenme', seviye: 'kritik', icd: 'J44.1' },
@@ -209,7 +221,10 @@ export async function seedHastalar() {
         hikaye: 'Asemptomatik. CgA: Şubat 124, Nisan 200 µg/L (% 61 artış). Flush, ishal, taşikardi öyküsü yok.',
         ozgecmis: 'Hashimoto tiroiditi (Euthyrox 50 mcg).',
         soygecmis: 'Anne meme Ca, teyze tiroid Ca.',
-        fmBulgular: 'TA 122/78, KH 76. Boyun: tiroid normal. Karın: yumuşak, organomegali yok. Cilt: flush/telanjiektazi yok.'
+        fmBulgular: 'TA 122/78, KH 76. Boyun: tiroid normal. Karın: yumuşak, organomegali yok. Cilt: flush/telanjiektazi yok.',
+        laboratuvar: 'Kromogranin A: 28.02.2026 = 124 → 16.04.2026 = 200 µg/L (% 61 artış, 7 hafta). PPI/H2RA kullanımı yok. Plan: gastrin, eGFR, KCFT, TSH, anti-parietal Ab, B12, H.pylori; açlıkta 3. CgA tekrarı; 24 saat idrar 5-HIAA, plazma/idrar metanefrin, NSE.',
+        goruntuleme: 'Üst GİS endoskopi planlandı. Abdominal BT ± 68Ga-DOTATATE PET değerlendirmeye alındı.',
+        digerTetkikler: ''
       },
       tanilar: [
         { tanim: 'Yükselen Kromogranin A', seviye: 'izlem', icd: '' },
@@ -225,7 +240,10 @@ export async function seedHastalar() {
         hikaye: '20 yıl önce unprovoke DVT sonrası warfarin başlandı, INR 2-3 aralığında tutuluyor. Son 3 ayda eGFR 50→46→40 (10 puan kayıp), INR 2.36→2.44→2.92 yükselişte. Mart.26 BUN 100.9. Hgb ~11.2 normositik. APS workup planlandı — APS(-) çıkarsa apixaban geçişi gündemde.',
         ozgecmis: 'Unprovoke DVT (yaklaşık 20 yıl önce). Kronik warfarin kullanımı. DM yok, HT yok. Önceden APS taraması yapılmamış.',
         soygecmis: 'Belirgin tromboembolik hastalık öyküsü yok. Annede HT, babada KAH.',
-        fmBulgular: 'TA 128/76, KH 72. Bacaklarda kronik venöz değişiklik (+), aktif DVT bulgusu yok (Homans negatif, asimetri yok). Periferik nabızlar palpabl. Cilt: ekimoz veya peteşi yok. Karın yumuşak.'
+        fmBulgular: 'TA 128/76, KH 72. Bacaklarda kronik venöz değişiklik (+), aktif DVT bulgusu yok (Homans negatif, asimetri yok). Periferik nabızlar palpabl. Cilt: ekimoz veya peteşi yok. Karın yumuşak.',
+        laboratuvar: 'INR: 2.36 → 2.44 → 2.92 (son 3 ölçüm, yükselişte). eGFR: 50 → 46 → 40 (3 ayda 10 puan kayıp). Mart.2026 BUN 100.9 ↑. Hgb ~11.2 (normositik). HbA1c 5.77. Albümin/Kreatinin oranı 24. APS paneli istendi (LAC + aCL + anti-β2GPI + ANA + dsDNA + C3/C4) — warfarin notu eklendi.',
+        goruntuleme: 'Bekleyen: renal USG (hızlı eGFR düşüşü etyolojisi). Önceki abdominal görüntüleme yok.',
+        digerTetkikler: 'Periferik damar değerlendirmesi: bilinen DVT sekeli, aktif yeni trombüs bulgusu yok.'
       },
       tanilar: [
         { tanim: 'Unprovoke DVT (20 yıl warfarin)', seviye: 'izlem',  icd: 'I82.4' },
@@ -244,7 +262,10 @@ export async function seedHastalar() {
         hikaye: '4 yıl önce siroz tanısı konuldu (Anti-HBc IgG+, kronik geçirilmiş HBV). Asit ve bacak ödemi atakları tekrarlıyor. Son BT\'de makrolobülasyon + milimetrik hipodens odaklar — kontrastsız çekildiği için HCC ekarte edilemedi. 01.05.2026 NH3 127 → hepatik ensefalopati ile uyumlu, rifaximin eklemesi planlandı. K 5.59 nedeniyle aldakton revizyonu gündemde.',
         ozgecmis: 'Kronik geçirilmiş HBV (HBsAg−, Anti-HBc IgG+). HCV negatif. Alkol kullanımı yok. Bilinen HT/DM yok. Üst GİS endoskopi henüz yapılmamış (varis taraması bekleniyor).',
         soygecmis: 'Belirgin karaciğer hastalığı öyküsü yok.',
-        fmBulgular: 'TA 110/68, KH 86, ateş yok. Skleralarda hafif ikter. Karın: distandü, shifting dullness (+), spider angioma 2 adet. Bilateral pretibial ödem +1. Asterixis (+). Bilinç: oryantasyon korunmuş ancak yavaş yanıtlar (West Haven grade 1-2)'
+        fmBulgular: 'TA 110/68, KH 86, ateş yok. Skleralarda hafif ikter. Karın: distandü, shifting dullness (+), spider angioma 2 adet. Bilateral pretibial ödem +1. Asterixis (+). Bilinç: oryantasyon korunmuş ancak yavaş yanıtlar (West Haven grade 1-2)',
+        laboratuvar: '01.05.2026: NH3 127 ↑, K 5.59 ↑, Kreatinin 1.15 / eGFR 61, LDH 299, Na 130 ↓, Albümin 2.9 ↓, PLT 91 ↓. HBsAg negatif, Anti-HBc IgG pozitif. Bekleyen: AFP, HBV-DNA.',
+        goruntuleme: 'Abdominal BT (kontrastsız): makrolobülasyon + milimetrik hipodens odaklar — HCC ekarte edilemedi. Plan: kontrastlı KC MR veya dinamik BT.',
+        digerTetkikler: 'Üst GİS endoskopi bekleniyor (özofagus varis taraması).'
       },
       tanilar: [
         { tanim: 'KC siroz Child B (MELD-Na 16)',      seviye: 'kritik', icd: 'K74.6' },
@@ -267,7 +288,10 @@ export async function seedHastalar() {
         hikaye: 'Bazal kognisyonu normal olan hasta, evde halüsinasyon ve ajitasyon geliştirince yakınları tarafından getirildi. Hgb 8.6 / MCV 62.3 / Ferritin 10.1 — kronik DEA. GFR 48 (AKI), CRP 62.3 (enfeksiyon olası), AKŞ 267 ancak HbA1c 5.7 (stres hiperglisemisi). K 3.37, Mg 1.05, P 2.5 — refrakter hipokalemi muhtemelen hipomagnezemiye sekonder. Metabolik alkaloz ve hematüri mevcut — ürotelyal Ca taraması (BT ürografi + sistoskopi) planlandı.',
         ozgecmis: 'Bilinen DM/HT tanısı yok ya da tanımlanmamış. Demir replasmanı veya GİS endoskopi öyküsü yok. Polifarmasi sorgulanmadı.',
         soygecmis: 'Ablada kolon Ca öyküsü.',
-        fmBulgular: 'Bilinç: konfüze, oryantasyon kısmi (zaman−, yer ±, kişi+). TA 138/82, KH 96, ateş 37.4. Konjonktiva soluk, dil papillaları silik. Bilateral pretibial ödem +1. Nörolojik: asterixis yok, lateralize bulgu yok. Mini-mental kooperasyon kısıtlı, ölçülemedi.'
+        fmBulgular: 'Bilinç: konfüze, oryantasyon kısmi (zaman−, yer ±, kişi+). TA 138/82, KH 96, ateş 37.4. Konjonktiva soluk, dil papillaları silik. Bilateral pretibial ödem +1. Nörolojik: asterixis yok, lateralize bulgu yok. Mini-mental kooperasyon kısıtlı, ölçülemedi.',
+        laboratuvar: 'Hgb 8.6 ↓ / MCV 62.3 ↓ / Ferritin 10.1 ↓ — kronik mikrositer DEA. eGFR 48 (AKI). K 3.37 ↓, Mg 1.05 ↓, P 2.5 ↓ — refrakter hipokalemi (muhtemelen Mg eksikliğine sekonder). CRP 62.3 ↑. AKŞ 267 / HbA1c 5.7 (stres hiperglisemisi). Metabolik alkaloz. Hematüri (+). Kan ve idrar kültürleri gönderildi.',
+        goruntuleme: 'Beyin BT planlandı (akut deliryum etyolojisi). BT ürografi + sistoskopi: ürotelyal Ca taraması (hematüri).',
+        digerTetkikler: 'GİS endoskopi planlandı (mikrositer DEA kaynağı). EKG: sinüs ritmi, QTc normal.'
       },
       tanilar: [
         { tanim: 'Akut deliryum (zoopsi)',           seviye: 'kritik', icd: 'F05' },
@@ -286,7 +310,10 @@ export async function seedHastalar() {
         hikaye: '2 ay önce çarpıntı yakınmasıyla başvurdu. FT3 6.56, FT4 2.53, TSH 0.01 — biyokimyasal hipertiroidi. TRAb (−) ve Anti-TPO (−). USG: diffüz guatr, heterojen hipoekoik, nodül yok. MMI 20 mg/gün başlandı; 7 gün sonra hormon değerlerinde düşüş yok. Ayırıcı tanıda Jod-Basedow ve sessiz tiroidit ön planda — yakın iyot maruziyeti sorgulanacak.',
         ozgecmis: 'Yakın dönemde kontrastlı görüntüleme öyküsü sorgulanacak (iyot yükü). Bilinen tiroid hastalığı yok. KAH/DM yok.',
         soygecmis: 'Anne hipotiroidi, kız kardeş Graves hastalığı.',
-        fmBulgular: 'TA 132/74, KH 104 (sinüs taşikardi), ateş yok. Boyun: diffüz hafif büyümüş tiroid, palpabl nodül yok, tiroid üzerinde üfürüm duyulmadı. Hafif distal tremor (+). Cilt sıcak ve nemli. Egzoftalmi yok, lid lag yok.'
+        fmBulgular: 'TA 132/74, KH 104 (sinüs taşikardi), ateş yok. Boyun: diffüz hafif büyümüş tiroid, palpabl nodül yok, tiroid üzerinde üfürüm duyulmadı. Hafif distal tremor (+). Cilt sıcak ve nemli. Egzoftalmi yok, lid lag yok.',
+        laboratuvar: 'FT3 6.56 ↑, FT4 2.53 ↑, TSH 0.01 ↓. TRAb negatif, Anti-TPO negatif. Bekleyen: tiroglobulin, 24 saat idrar iyot atılımı, IL-6, TRAb tekrarı.',
+        goruntuleme: 'Tiroid USG: diffüz guatr, heterojen hipoekoik parankim, nodül yok. Plan: Doppler USG (vaskülarite — Graves vs sessiz tiroidit ayırıcısı).',
+        digerTetkikler: ''
       },
       tanilar: [
         { tanim: 'Hipertiroidi (TRAb negatif)', seviye: 'izlem', icd: 'E05.9' },
@@ -304,7 +331,10 @@ export async function seedHastalar() {
         hikaye: '10 yıl önce FMF tanısı konuldu, kolşisin 2x0.5 mg ile atak sıklığı belirgin azaldı. Son 6 ayda eklem ağrıları yeni semptom olarak eklendi. 16.03.2026 lab: ANA 4+ nükleer benekli, Anti-dsDNA 78.17 (sınırda), C4 0.13 düşük — SLE şüphesi. ENA profili gönderildi, romatoloji konsültasyonu planlandı.',
         ozgecmis: 'FMF (MEFV mutasyonu pozitif). Bilinen başka kronik hastalık yok. Gebelik yok, doğum kontrolü yöntemi kullanmıyor.',
         soygecmis: 'Anne FMF, babaanne SLE.',
-        fmBulgular: 'TA 118/72, KH 78, ateş yok. Eklemler: hafif el bilek hassasiyeti var, aktif sinovit veya efüzyon yok. Karın yumuşak, organomegali yok. Cilt: malar raş yok, oral ülser yok. Lenfadenopati yok.'
+        fmBulgular: 'TA 118/72, KH 78, ateş yok. Eklemler: hafif el bilek hassasiyeti var, aktif sinovit veya efüzyon yok. Karın yumuşak, organomegali yok. Cilt: malar raş yok, oral ülser yok. Lenfadenopati yok.',
+        laboratuvar: '16.03.2026: ANA (FANA) 4+ nükleer benekli, Anti-dsDNA 78.17 (sınırın hemen altında), C4 0.13 ↓, C3 normal. ENA profili istendi. MEFV mutasyonu pozitif (eski kayıt).',
+        goruntuleme: '',
+        digerTetkikler: 'Romatoloji konsültasyonu planlandı (SLE şüphesi).'
       },
       tanilar: [
         { tanim: 'FMF',                                seviye: 'stabil', icd: 'E85.0' },
@@ -322,7 +352,10 @@ export async function seedHastalar() {
         hikaye: '29.04.2026 lab: PP2h 62 (düşük), LDL 172, TotalKol 245, CRP 4.3, GFR 89, Hgb 13.4. Klinik + lab reaktif hipoglisemi ile uyumlu. OGTT+insülin, HbA1c, HOMA-IR henüz istenmedi. Hiperkolesterolemi eşlik ediyor. Diyet düzenlemesi + acarbose ve statin değerlendirmesi planlandı.',
         ozgecmis: 'Bilinen DM yok. Tiroid hastalığı yok. PCOS sorgulanacak. Gebelik diyabeti öyküsü yok.',
         soygecmis: 'Anne T2DM, baba 52 yaşında MI geçirdi.',
-        fmBulgular: 'TA 122/78, KH 76, BMI 27.4. Boyun: tiroid normal. Akantozis nigrikans yok. Karın yumuşak, hepatomegali yok. Periferik nabızlar palpabl. Nörolojik: tremor yok.'
+        fmBulgular: 'TA 122/78, KH 76, BMI 27.4. Boyun: tiroid normal. Akantozis nigrikans yok. Karın yumuşak, hepatomegali yok. Periferik nabızlar palpabl. Nörolojik: tremor yok.',
+        laboratuvar: '29.04.2026: PP2h 62 ↓, LDL 172 ↑, Total kolesterol 245 ↑, CRP 4.3, eGFR 89, Hgb 13.4. Eksik: OGTT + insülin profili, HbA1c, HOMA-IR, TSH.',
+        goruntuleme: '',
+        digerTetkikler: ''
       },
       tanilar: [
         { tanim: 'Reaktif hipoglisemi',  seviye: 'izlem', icd: '' },
@@ -338,7 +371,10 @@ export async function seedHastalar() {
         hikaye: '12 yıl T2DM, son 4 yıldır mikroalbüminüri. HbA1c 6.6 (iyi kontrol), Krea 1.4 / eGFR 50-55 (KBH G3a). Forxiga altında 2 yıldır stabil. UACR ≥30 ve K+ ≤4.8 ise finerenon (Kerendia) eklemesi gündemde; ACEi/ARB rejimi ve K+ takibi doğrulanacak.',
         ozgecmis: 'T2DM 12 yıl. HT 8 yıl. KAH veya MI öyküsü yok. Diyabetik retinopati taraması 6 ay önce normaldi. Sigara yok.',
         soygecmis: 'Baba T2DM, erkek kardeş T2DM, annede HT.',
-        fmBulgular: 'TA 134/82, KH 76, BMI 29.6. Periferik nabızlar palpabl, pretibial ödem yok. Monofilament testi normal (diyabetik nöropati yok). Akciğer ve kalp auskültasyonu temiz.'
+        fmBulgular: 'TA 134/82, KH 76, BMI 29.6. Periferik nabızlar palpabl, pretibial ödem yok. Monofilament testi normal (diyabetik nöropati yok). Akciğer ve kalp auskültasyonu temiz.',
+        laboratuvar: 'HbA1c 6.6 (iyi kontrol), Kreatinin 1.4, eGFR 50-55 (KBH G3a). UACR ≥30. Bekleyen: tekrar K+ ölçümü (Kerendia eklemesi öncesi, ≤4.8 olmalı).',
+        goruntuleme: '',
+        digerTetkikler: 'Diyabetik retinopati taraması (göz dibi) 6 ay önce normaldi. Monofilament normal — nöropati taraması temiz.'
       },
       tanilar: [
         { tanim: 'T2DM',                        seviye: 'stabil', icd: 'E11.9' },
@@ -356,7 +392,10 @@ export async function seedHastalar() {
         hikaye: 'Forxiga altında 18 aydır stabil. Hgb 18, Htc 48, transferrin satürasyonu %27 (normal) — demir eksikliği yok. Tablo SGLT2i fizyolojisi ile uyumlu (eritropoetin uyarımı + hafif hemokonsantrasyon). Yıllık takip kararlaştırıldı; pletora veya semptomatik hiperviskozite olmadığı için JAK2 mutasyonu istenmedi.',
         ozgecmis: 'T2DM 6 yıl. Sigara yok. Yüksek irtifada yaşam yok. KOAH veya OSAS bilinmiyor.',
         soygecmis: 'Belirgin hematolojik hastalık öyküsü yok.',
-        fmBulgular: 'TA 128/78, KH 72, BMI 26.1. Cilt rengi normal, pletora yok. Splenomegali yok. Periferik nabızlar normal. SpO2 oda havası %97.'
+        fmBulgular: 'TA 128/78, KH 72, BMI 26.1. Cilt rengi normal, pletora yok. Splenomegali yok. Periferik nabızlar normal. SpO2 oda havası %97.',
+        laboratuvar: 'Hgb 18, Htc 48. Transferrin satürasyonu %27 (normal). Ferritin normal. Demir eksikliği yok. EPO ve JAK2 mutasyonu istenmedi (klinik gerekçesi yok).',
+        goruntuleme: '',
+        digerTetkikler: ''
       },
       tanilar: [
         { tanim: 'SGLT2i fizyolojisi — eritrositoz', seviye: 'stabil', icd: '' }
@@ -373,7 +412,10 @@ export async function seedHastalar() {
         hikaye: 'Metastatik prostat Ca takipli, bilateral nefrostomi mevcut (obstrüktif üropati). 48 saat önce ateş 39 °C ve titreme atağıyla başvurdu. PCT 2.5, CRP ~150 → ürosepsis ön tanısı. Kan, idrar ve nefrostomi kültürleri alındı. Meropenem extended infusion başlandı. Hemodinami yakın izleme alındı.',
         ozgecmis: 'Prostat Ca (4 yıl), kemik metastazı (+). Önceki RT ve androjen deprivasyon tedavisi. Bilateral nefrostomi 14 ay önce yerleştirildi. KAH yok.',
         soygecmis: 'Babada prostat Ca.',
-        fmBulgular: 'TA 96/58 (sepsiste), KH 112, ateş 38.7, SS 22/dk, SpO2 oda havası %94. Bilinç: GKS 14 (hafif yavaş yanıtlar, oryantasyon kısmi). Karın: hafif suprapubik hassasiyet, defans yok. Bilateral nefrostomi açık, idrar bulanık görünümde. Bacaklarda 1+ ödem.'
+        fmBulgular: 'TA 96/58 (sepsiste), KH 112, ateş 38.7, SS 22/dk, SpO2 oda havası %94. Bilinç: GKS 14 (hafif yavaş yanıtlar, oryantasyon kısmi). Karın: hafif suprapubik hassasiyet, defans yok. Bilateral nefrostomi açık, idrar bulanık görünümde. Bacaklarda 1+ ödem.',
+        laboratuvar: 'Prokalsitonin 2.5 ↑, CRP ~150 ↑. Kan, idrar ve nefrostomi kültürleri gönderildi. Kreatinin ve elektrolitler yakın izlemde. PSA takipte.',
+        goruntuleme: 'Bekleyen: kemik sintigrafisi takibi (metastaz progresyonu). Nefrostomi kateterleri açık görünümde — USG kontrolü planlandı.',
+        digerTetkikler: 'EKG: sinüs taşikardi (sepsiste, KH ~112). PSA takibi devam ediyor.'
       },
       tanilar: [
         { tanim: 'Prostat Ca (takip)',       seviye: 'izlem',  icd: 'C61' },
@@ -395,9 +437,9 @@ export async function seedHastalar() {
 
     if (mevcut) {
       // Mevcut hastayı çoğaltma; sadece SEED'de değer olup mevcut kayıtta
-      // boş olan semptom alanlarını ekle (elle girilenleri ezme).
+      // boş olan serbest-metin alanlarını ekle (elle girilenleri ezme).
       const patch = {};
-      for (const key of SEMPTOM_KEYS) {
+      for (const key of METIN_ALAN_KEYS) {
         const mevcutVal = (mevcut.data?.[key] || '').trim();
         const seedVal   = (item.hasta?.[key] || '').trim();
         if (!mevcutVal && seedVal) patch[key] = item.hasta[key];

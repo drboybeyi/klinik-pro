@@ -205,6 +205,10 @@ export async function saveAiSorgu(data) {
   return r.key;
 }
 
+export async function deleteAiSorgu(id) {
+  await remove(userRef(`aiSorgulari/${id}`));
+}
+
 // --- Ayarlar ---
 
 export async function saveAyarlar(data) {

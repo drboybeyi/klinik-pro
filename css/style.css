@@ -1810,3 +1810,143 @@ body {
   .ai-sablon-ad   { font-size: 10px; }
   .ai-form-row    { flex-direction: column; align-items: stretch; gap: 6px; }
 }
+
+/* ============== AI v0.3.4.1 EKLER ============== */
+
+/* Web search checkbox satırı */
+.ai-checkbox-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 14px;
+  padding: 8px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ai-checkbox-row input[type="checkbox"] {
+  margin: 2px 0 0;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--accent);
+  flex: 0 0 auto;
+  cursor: pointer;
+}
+
+.ai-checkbox-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  line-height: 1.3;
+}
+
+.ai-checkbox-sub {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-secondary);
+}
+
+/* Yanıt aksiyon mini buton grubu (Markdown / Metin / PDF / Kaydet) */
+.ai-yanit-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.btn-mini {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 30px;
+  padding: 5px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms, border-color 150ms;
+  white-space: nowrap;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.btn-mini:hover { background: var(--border); border-color: var(--accent); }
+.btn-mini:disabled { opacity: 0.5; cursor: wait; }
+
+.btn-mini-primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.btn-mini-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+
+.btn-mini-danger {
+  background: #fff;
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.btn-mini-danger:hover { background: var(--danger); color: #fff; }
+
+/* Geçmiş kartı sağ üst aksiyon */
+.ai-gecmis-kart-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ai-gecmis-kart-actions .icon-btn {
+  font-size: 13px;
+  padding: 2px 4px;
+}
+
+/* Modal — alt aksiyon barı */
+.ai-gecmis-modal-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+  padding-top: 12px;
+  margin-top: 4px;
+  border-top: 1px solid var(--border);
+}
+
+/* Modal — soru collapse */
+.ai-gecmis-soru.collapsed {
+  max-height: 4.6em;
+  overflow: hidden;
+  position: relative;
+}
+
+.ai-gecmis-soru.collapsed::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 1.4em;
+  background: linear-gradient(to bottom, transparent, var(--bg-secondary));
+  pointer-events: none;
+}
+
+.ai-soru-toggle {
+  margin-top: 4px;
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 0;
+  text-decoration: underline;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ai-soru-toggle:hover { color: var(--accent-hover); }

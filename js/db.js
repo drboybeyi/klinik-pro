@@ -17,7 +17,7 @@ function userRef(path) { return ref(db, `users/${_uid}/${path}`); }
 // --- Listeners ---
 
 export function startListeners() {
-  ['hastalar', 'tanilar', 'ilaclar', 'alerjiler', 'notlar', 'tetkikler', 'ayarlar']
+  ['hastalar', 'tanilar', 'ilaclar', 'alerjiler', 'notlar', 'tetkikler', 'aiSorgulari', 'ayarlar']
     .forEach(_listen);
 }
 
@@ -195,6 +195,14 @@ export async function deleteTetkikDosya(path) {
     // Dosya yoksa sessizce geç; diğer hatalarda fırlat
     if (e.code !== 'storage/object-not-found') throw e;
   }
+}
+
+// --- AI Sorgu CRUD ---
+
+export async function saveAiSorgu(data) {
+  const r = push(userRef('aiSorgulari'));
+  await set(r, { ...data, id: r.key, olusturmaTarih: new Date().toISOString() });
+  return r.key;
 }
 
 // --- Ayarlar ---

@@ -11,6 +11,7 @@ import { openTetkikForm }  from '../components/tetkikForm.js';
 import { confirm }         from '../components/modal.js';
 import { showToast }       from '../components/toast.js';
 import { formatTarih }     from '../utils.js';
+import { renderAiPanel, attachAiListeners, resetAi, refreshAiGecmis } from '../components/aiSorgu.js';
 
 const SEMPTOM_FIELDS = [
   { key: 'sikayetler', label: 'Başvuru Şikayetleri', icon: '📋' },
@@ -71,7 +72,8 @@ function _mount() {
     subscribe('ilaclar',   () => _refreshSection('hdIlaclarList',  _renderIlaclarList)),
     subscribe('alerjiler', () => _refreshSection('hdAlerjiList',   _renderAlerjiList)),
     subscribe('notlar',    () => _refreshSection('hdNotlarList',   _renderNotlarList)),
-    subscribe('tetkikler', () => _refreshSection('hdTetkiklerList', _renderTetkiklerList))
+    subscribe('tetkikler', () => _refreshSection('hdTetkiklerList', _renderTetkiklerList)),
+    subscribe('aiSorgulari', () => _refreshAiTab())
   ];
 }
 
@@ -80,6 +82,7 @@ function _unmount() {
   _unsubs = [];
   _overlay?.remove();
   _overlay = null;
+  resetAi();
 }
 
 function _close() {
@@ -128,6 +131,7 @@ function _buildAll() {
       <div class="top-tab ${_aktifTab==='semptomlar' ? 'active':''}" data-tab="semptomlar">Semptomlar</div>
       <div class="top-tab ${_aktifTab==='tetkikler'  ? 'active':''}" data-tab="tetkikler">Tetkikler</div>
       <div class="top-tab ${_aktifTab==='notlar'     ? 'active':''}" data-tab="notlar">Notlar</div>
+      <div class="top-tab ${_aktifTab==='ai'         ? 'active':''}" data-tab="ai">AI</div>
     </div>
 
     <div class="hasta-detay-body">
@@ -135,10 +139,12 @@ function _buildAll() {
       <div id="hdPanelSemptomlar" style="display:${_aktifTab==='semptomlar' ?'block':'none'}">${_renderMetinPanel(hasta, SEMPTOM_FIELDS)}</div>
       <div id="hdPanelTetkikler"  style="display:${_aktifTab==='tetkikler'  ?'block':'none'}">${_renderTetkiklerPanel()}</div>
       <div id="hdPanelNotlar"     style="display:${_aktifTab==='notlar'     ?'block':'none'}">${_renderNotlarPanel()}</div>
+      <div id="hdPanelAi"         style="display:${_aktifTab==='ai'         ?'block':'none'}">${renderAiPanel(_hastaId)}</div>
     </div>
   `;
 
   _attachListeners();
+  if (_aktifTab === 'ai') attachAiListeners(_hastaId);
 }
 
 // --- Tab panels ---
@@ -514,7 +520,7 @@ function _switchTab(tab) {
   _aktifTab = tab;
   _overlay.querySelectorAll('.top-tab').forEach(t =>
     t.classList.toggle('active', t.dataset.tab === tab));
-  ['ozet', 'semptomlar', 'tetkikler', 'notlar'].forEach(name => {
+  ['ozet', 'semptomlar', 'tetkikler', 'notlar', 'ai'].forEach(name => {
     const panel = document.getElementById(`hdPanel${_capitalize(name)}`);
     if (panel) panel.style.display = name === tab ? 'block' : 'none';
   });
@@ -522,6 +528,7 @@ function _switchTab(tab) {
   if (tab === 'ozet')      _attachOzetListeners();
   if (tab === 'notlar')    _attachNotlarListeners();
   if (tab === 'tetkikler') _attachTetkiklerListeners();
+  if (tab === 'ai')        attachAiListeners(_hastaId);
 }
 
 function _capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
@@ -556,6 +563,11 @@ function _refreshSection(containerId, renderFn) {
   const el = document.getElementById(containerId);
   if (!el) return;
   el.innerHTML = renderFn();
+}
+
+function _refreshAiTab() {
+  // Sadece geçmiş listesini güncelle; textarea, model seçimi, aktif yanıt bozulmasın
+  refreshAiGecmis(_hastaId);
 }
 
 function _attachOzetListeners() {

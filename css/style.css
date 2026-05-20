@@ -1505,3 +1505,308 @@ body {
 .btn-option.active.kritik  { border-color: var(--danger);  background: var(--danger); }
 .btn-option.active.izlem   { border-color: var(--warning); background: var(--warning); }
 .btn-option.active.stabil  { border-color: var(--success); background: var(--success); }
+
+/* ============== AI KONSÜLTASYON (v0.3.3) ============== */
+
+.ai-panel { padding-bottom: 24px; }
+
+.ai-form-card {
+  margin-bottom: 12px;
+  padding: 16px;
+}
+
+.ai-form-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.ai-model-select {
+  flex: 1;
+  min-height: 40px;
+  padding: 8px 12px;
+  font-size: 13px;
+}
+
+.ai-sablon-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.ai-sablon-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-height: 64px;
+  padding: 10px 8px;
+  background: var(--bg-secondary);
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  color: var(--text-primary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: center;
+  line-height: 1.2;
+  transition: background 150ms, border-color 150ms, transform 100ms;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.ai-sablon-btn:hover {
+  background: var(--border);
+  border-color: var(--accent);
+}
+
+.ai-sablon-btn:active { transform: scale(0.97); }
+
+.ai-sablon-icon { font-size: 20px; }
+.ai-sablon-ad   { font-size: 11px; }
+
+.ai-sor-btn {
+  width: 100%;
+  min-height: 46px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ai-sor-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+/* Aktif yanıt kartı */
+
+.ai-yanit-card {
+  margin-bottom: 12px;
+  padding: 14px 16px;
+}
+
+.ai-yanit-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding-bottom: 10px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.ai-yanit-meta-info {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.ai-yanit-meta-info strong { color: var(--text-primary); }
+
+.ai-yanit-meta-sep {
+  color: var(--border);
+  font-weight: 600;
+}
+
+.ai-yanit-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.ai-yanit-body {
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-primary);
+}
+
+/* Markdown render */
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3 {
+  margin: 16px 0 8px;
+  color: var(--text-primary);
+  font-weight: 700;
+  line-height: 1.3;
+}
+.markdown-body h1 { font-size: 18px; }
+.markdown-body h2 { font-size: 16px; }
+.markdown-body h3 { font-size: 14px; color: var(--accent); }
+
+.markdown-body p { margin: 8px 0; }
+
+.markdown-body ul,
+.markdown-body ol {
+  margin: 8px 0;
+  padding-left: 24px;
+}
+
+.markdown-body li { margin: 4px 0; }
+
+.markdown-body strong { color: var(--text-primary); font-weight: 700; }
+
+.markdown-body code {
+  background: var(--bg-secondary);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--accent-hover);
+}
+
+.markdown-body pre {
+  background: var(--bg-secondary);
+  padding: 10px 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 12px;
+  margin: 8px 0;
+}
+
+.markdown-body pre code { background: transparent; padding: 0; }
+
+.markdown-body blockquote {
+  border-left: 3px solid var(--accent);
+  padding-left: 12px;
+  margin: 8px 0;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.markdown-body hr {
+  border: 0;
+  border-top: 1px solid var(--border);
+  margin: 12px 0;
+}
+
+.markdown-body a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+/* Loading state */
+
+.ai-yanit-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px 16px;
+}
+
+.ai-yanit-loading-text {
+  font-size: 14px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.ai-spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: aiSpin 800ms linear infinite;
+}
+
+@keyframes aiSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* Geçmiş listesi */
+
+.ai-gecmis-card { padding: 14px 16px; }
+
+.ai-gecmis-kart {
+  padding: 10px 12px;
+  margin-bottom: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 150ms, border-color 150ms;
+}
+
+.ai-gecmis-kart:hover {
+  background: var(--border);
+  border-color: var(--accent);
+}
+
+.ai-gecmis-kart:last-child { margin-bottom: 0; }
+
+.ai-gecmis-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.ai-gecmis-tarih {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.ai-gecmis-onizleme {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.4;
+}
+
+/* Geçmiş modalı */
+
+.ai-gecmis-modal {
+  max-width: 720px;
+  width: 92vw;
+  max-height: 88vh;
+  overflow-y: auto;
+}
+
+.ai-gecmis-modal-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  padding: 0 0 12px;
+  margin-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.ai-gecmis-bolum { margin-bottom: 14px; }
+
+.ai-gecmis-bolum-baslik {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 6px;
+}
+
+.ai-gecmis-soru {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+/* Mobil tweak */
+@media (max-width: 480px) {
+  .ai-sablon-grid { gap: 6px; }
+  .ai-sablon-btn  { min-height: 58px; padding: 8px 4px; }
+  .ai-sablon-ad   { font-size: 10px; }
+  .ai-form-row    { flex-direction: column; align-items: stretch; gap: 6px; }
+}

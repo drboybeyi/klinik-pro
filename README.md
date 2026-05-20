@@ -14,6 +14,7 @@ Türk klinisyenler için mobil-first, PWA tabanlı hasta takip ve karar destek s
 | v0.3.4-AI | AI Konsültasyon sekmesi (5. tab) — Claude API, 6 şablon, markdown render | ✅ |
 | v0.3.4.1-AI-iyilestirme | Web Search, PDF export, Markdown/Düz Metin kopyala, sil | ✅ |
 | v0.3.4.2-pdf-fix | html2pdf container CSS düzeltmesi (opacity:0 + onclone callback) | ✅ |
+| v0.3.4.3-print-dialog | html2pdf kaldırıldı, native print dialog'a geçildi (window.open + win.print) | ✅ |
 | v0.3-lab-yapilandirilmis | 60+ parametre, referans aralık, 4-seviye flagger, trend grafik | 🔜 |
 | v0.4-skor | 17 hesaplayıcı (CHA₂DS₂-VASc, CKD-EPI 2021, MELD-Na, Wells…) | 🔜 |
 | v0.5-rehber | Decision tree motoru, HFrEF/KOAH/T2DM+KBH/FMF algoritmaları | 🔜 |
@@ -63,7 +64,7 @@ Türk klinisyenler için mobil-first, PWA tabanlı hasta takip ve karar destek s
   - Şablon tıklayınca textarea, hastanın tüm verisiyle (demografi, semptomlar, tetkikler, tanılar, ilaçlar, alerjiler) otomatik doldurulur
   - Yanıt: **marked.js** ile markdown render — başlıklar, listeler, kod blokları, kaynak linkleri
   - Metadata satırı: model • token (in+out) • web search sayısı • tahmini maliyet (USD)
-  - Aksiyonlar: **📋 Markdown** (raw) · **📝 Düz Metin** (HTML stripped) · **📄 PDF İndir** (html2pdf.js, A4, KVKK disclaimer footer) · **💾 Kaydet**
+  - Aksiyonlar: **📋 Markdown** (raw) · **📝 Düz Metin** (HTML stripped) · **📄 PDF İndir** (native print dialog: yeni sekme → Ctrl+P → "PDF olarak kaydet") · **💾 Kaydet**
   - **Önceki Konsültasyonlar** listesi: hasta bazlı, tarih sıralı, 🗑 sil ile tekil silme
   - Karta tıkla → modal: metadata + soru (uzunsa collapse/expand) + tam yanıt + 4 buton (MD/Metin/PDF/Sil)
   - PDF dosya adı: `KlinikPro_{hastaAd}_{YYYY-MM-DD}.pdf`
@@ -115,7 +116,7 @@ Firebase Console → Authentication → Sign-in method → Email/Password aktif 
 - **Backend:** Firebase Realtime Database + Firebase Auth (v10.13.2), Firebase Storage
 - **AI:** Anthropic Claude API (Sonnet 4.5 / Opus 4.7 / Haiku 4.5) — Cloudflare Worker proxy + opsiyonel `web_search_20250305` tool
 - **PWA:** Service Worker (network-first), Web App Manifest
-- **Üçüncü taraf CDN:** marked.js (markdown render), html2pdf.js (PDF export)
+- **Üçüncü taraf CDN:** marked.js (markdown render) — PDF export tarayıcının native print dialog'ı ile yapılır (ek kütüphane yok)
 - **Tasarım:** [Defter Pro](../smm-pro) görsel kimliği — sıcak bej palette
 
 ## Tasarım Sistemi

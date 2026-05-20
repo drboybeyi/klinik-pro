@@ -11,10 +11,11 @@ Türk klinisyenler için mobil-first, PWA tabanlı hasta takip ve karar destek s
 | v0.3.2.a-semptom | Semptomlar sekmesi (5 kart, modal düzenleyici) | ✅ |
 | v0.3.2.b-tetkik | Tetkikler sekmesi (jenerik metin) → v0.3.3'te koleksiyona göç etti | ✅ |
 | v0.3.3-tetkik-kayit | Tetkik koleksiyonu + Firebase Storage dosya ekleri | ✅ |
+| v0.3.4-AI | AI Konsültasyon sekmesi (5. tab) — Claude API, 6 şablon, markdown render | ✅ |
+| v0.3.4.1-AI-iyilestirme | Web Search, PDF export, Markdown/Düz Metin kopyala, sil | ✅ |
 | v0.3-lab-yapilandirilmis | 60+ parametre, referans aralık, 4-seviye flagger, trend grafik | 🔜 |
 | v0.4-skor | 17 hesaplayıcı (CHA₂DS₂-VASc, CKD-EPI 2021, MELD-Na, Wells…) | 🔜 |
 | v0.5-rehber | Decision tree motoru, HFrEF/KOAH/T2DM+KBH/FMF algoritmaları | 🔜 |
-| v0.6-AI | Claude API + DDx asistanı + hasta özetleme + ilaç sorgu | 🔜 |
 | v0.7-kaynak | PubMed/ESC/ADA/KDIGO kaynak otomasyonu | 🔜 |
 | v0.8-ilac | RxNav + TİTCK etkileşim, renal/hepatik doz, gebelik kategorisi | 🔜 |
 
@@ -32,7 +33,7 @@ Türk klinisyenler için mobil-first, PWA tabanlı hasta takip ve karar destek s
 
 **Hasta Detay Overlay (sağdan slide-in)**
 - Header: geri ← butonu, hasta adı, ⋯ menü (Düzenle / Sil)
-- 4 top-tab: **Özet** / **Semptomlar** / **Tetkikler** / **Notlar**
+- 5 top-tab: **Özet** / **Semptomlar** / **Tetkikler** / **Notlar** / **AI**
 - **Özet sekmesi:**
   - Demografi grid (yaş/cinsiyet, MRN, telefon)
   - Klinik özet bandı (turuncu sol border)
@@ -53,6 +54,18 @@ Türk klinisyenler için mobil-first, PWA tabanlı hasta takip ve karar destek s
   - SOAP not listesi (yeni → eski)
   - S / O / A / P dört textarea, tarih + tip (vizit/telefon/lab)
   - Kart tıklanınca genişler (chevron animasyonu)
+- **AI sekmesi (v0.3.4 + v0.3.4.1):**
+  - Cloudflare Worker proxy → Anthropic API (Claude)
+  - Model seçimi: **Sonnet 4.5** (varsayılan) / **Opus 4.7** / **Haiku 4.5**
+  - 🌐 **Web search** checkbox (default kapalı, açıkken canlı PubMed/ESC/ADA arar — `web_search_20250305` tool, max 5 arama, +$0.01/arama)
+  - **6 şablon butonu:** 🩺 Ayırıcı Tanı · 🔬 Tetkik Öner · 💊 Tedavi Planı · 📊 Lab Yorumla · 📋 Panöneri (yatak başı) · 📚 Kılavuz Sorgula
+  - Şablon tıklayınca textarea, hastanın tüm verisiyle (demografi, semptomlar, tetkikler, tanılar, ilaçlar, alerjiler) otomatik doldurulur
+  - Yanıt: **marked.js** ile markdown render — başlıklar, listeler, kod blokları, kaynak linkleri
+  - Metadata satırı: model • token (in+out) • web search sayısı • tahmini maliyet (USD)
+  - Aksiyonlar: **📋 Markdown** (raw) · **📝 Düz Metin** (HTML stripped) · **📄 PDF İndir** (html2pdf.js, A4, KVKK disclaimer footer) · **💾 Kaydet**
+  - **Önceki Konsültasyonlar** listesi: hasta bazlı, tarih sıralı, 🗑 sil ile tekil silme
+  - Karta tıkla → modal: metadata + soru (uzunsa collapse/expand) + tam yanıt + 4 buton (MD/Metin/PDF/Sil)
+  - PDF dosya adı: `KlinikPro_{hastaAd}_{YYYY-MM-DD}.pdf`
 
 **Veri Modeli (Firebase RTDB)**
 ```
@@ -64,6 +77,9 @@ Türk klinisyenler için mobil-first, PWA tabanlı hasta takip ve karar destek s
 /users/{uid}/notlar/{id}     — hastaId, tarih, tip, S, O, A, P
 /users/{uid}/tetkikler/{id}  — hastaId, tarih, tur, baslik, ozet, kritik,
                                 dosyalar[{ad, url, path, boyut, tip, yuklemeTarihi}]
+/users/{uid}/aiSorgulari/{id} — hastaId, model, apiModel, sablonAdi,
+                                soru, yanit, inputTokens, outputTokens,
+                                webSearchCount, tahminiMaliyet, olusturmaTarih
 ```
 
 **Firebase Storage**
@@ -95,8 +111,10 @@ Firebase Console → Authentication → Sign-in method → Email/Password aktif 
 ## Teknoloji
 
 - **Frontend:** Vanilla JS (ES modules), CSS custom properties
-- **Backend:** Firebase Realtime Database + Firebase Auth (v10.13.2)
+- **Backend:** Firebase Realtime Database + Firebase Auth (v10.13.2), Firebase Storage
+- **AI:** Anthropic Claude API (Sonnet 4.5 / Opus 4.7 / Haiku 4.5) — Cloudflare Worker proxy + opsiyonel `web_search_20250305` tool
 - **PWA:** Service Worker (network-first), Web App Manifest
+- **Üçüncü taraf CDN:** marked.js (markdown render), html2pdf.js (PDF export)
 - **Tasarım:** [Defter Pro](../smm-pro) görsel kimliği — sıcak bej palette
 
 ## Tasarım Sistemi

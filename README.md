@@ -13,6 +13,7 @@ Türk klinisyenler için mobil-first, PWA tabanlı hasta takip ve karar destek s
 | v0.3.3-tetkik-kayit | Tetkik koleksiyonu + Firebase Storage dosya ekleri | ✅ |
 | v0.3.4-AI | AI Konsültasyon sekmesi (5. tab) — Claude API, 6 şablon, markdown render | ✅ |
 | v0.3.4.1-AI-iyilestirme | Web Search, PDF export, Markdown/Düz Metin kopyala, sil | ✅ |
+| v0.3.4.2-pdf-fix | html2pdf container CSS düzeltmesi (opacity:0 + onclone callback) | ✅ |
 | v0.3-lab-yapilandirilmis | 60+ parametre, referans aralık, 4-seviye flagger, trend grafik | 🔜 |
 | v0.4-skor | 17 hesaplayıcı (CHA₂DS₂-VASc, CKD-EPI 2021, MELD-Na, Wells…) | 🔜 |
 | v0.5-rehber | Decision tree motoru, HFrEF/KOAH/T2DM+KBH/FMF algoritmaları | 🔜 |

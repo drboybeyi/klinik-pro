@@ -1,7 +1,8 @@
-// AI konsültasyon PDF dışa aktarma — html2pdf.js
-// Container CSS: opacity:0 + z-index:-1 + pointer-events:none (DOM'da görünür konumda ama gözle görünmez)
-// html2canvas elementi "görünmez" sanırsa boş render eder; bu yüzden top:-9999px DEĞİL.
-// onclone callback klonda elementi gerçekten görünür yapar (ekrana yansımaz).
+// AI konsültasyon PDF dışa aktarma — native print dialog (window.open + win.print())
+// html2pdf.js BIRAKILDI: off-screen render ve opacity:0+onclone iki yaklaşım da güvenilir çalışmadı.
+// Bu yaklaşım: yeni pencerede HTML render et, Ctrl+P dialog'u aç, kullanıcı "PDF olarak kaydet" seçer.
+
+import { showToast } from '../components/toast.js';
 
 const MODEL_KISA = {
   sonnet: 'Sonnet 4.5',
@@ -23,16 +24,6 @@ function _esc(s) {
   return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-function _safeName(s) {
-  return (s || 'hasta').replace(/[^\w\-]+/g, '_').slice(0, 40);
-}
-
-function _tarihStr(iso) {
-  const d = iso ? new Date(iso) : new Date();
-  const pad = n => String(n).padStart(2, '0');
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
 function _renderMd(text) {
   if (window.marked?.parse) {
     try { return window.marked.parse(text, { breaks: true }); } catch { /* fallthrough */ }
@@ -46,12 +37,9 @@ function _renderMd(text) {
  * @param {string} opts.hastaAd
  * @param {string} [opts.hastaMrn]
  */
-export async function exportPdf({ kayit, hastaAd, hastaMrn }) {
-  if (!window.html2pdf) throw new Error('html2pdf yüklü değil');
-
+export function exportPdf({ kayit, hastaAd, hastaMrn }) {
   const tarihIso  = kayit.olusturmaTarih || new Date().toISOString();
   const tarihDsp  = new Date(tarihIso).toLocaleString('tr-TR');
-  const tarihFn   = _tarihStr(tarihIso);
   const modelKisa = MODEL_KISA[kayit.model] || kayit.model || '-';
   const sablonAd  = SABLON_AD[kayit.sablonAdi] || 'Serbest Soru';
   const inT       = kayit.inputTokens  || 0;
@@ -61,121 +49,172 @@ export async function exportPdf({ kayit, hastaAd, hastaMrn }) {
     ? (kayit.tahminiMaliyet < 0.01 ? '<$0.01' : `~$${kayit.tahminiMaliyet.toFixed(2)}`)
     : '';
 
-  // 1) Container — DOM'da görünür KONUMDA ama opacity:0 ile gözle görünmez
-  const container = document.createElement('div');
-  container.setAttribute('data-pdf-container', 'true');
-  container.style.cssText = `
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 210mm;
-    padding: 20mm;
-    background: #ffffff;
-    color: #2d1f0f;
-    font-family: Arial, 'Segoe UI', sans-serif;
-    line-height: 1.6;
-    box-sizing: border-box;
-    z-index: -1;
-    opacity: 0;
-    pointer-events: none;
-  `;
+  const yanitHtml = _renderMd(kayit.yanit || '');
 
-  // 2) İçerik
-  container.innerHTML = `
-    <div style="border:2px solid #8b6f47;padding:15px;margin-bottom:20px;background:#faf5ed;border-radius:8px">
-      <h1 style="margin:0 0 10px;color:#8b6f47;font-size:20px;letter-spacing:0.3px">🏥 KLİNİK PRO — AI KONSÜLTASYON RAPORU</h1>
-      <p style="margin:5px 0;font-size:14px;font-weight:600">Dr. Ahmet Boyoğlu — İç Hastalıkları Uzmanı</p>
-      <p style="margin:5px 0;font-size:13px;color:#6b5640">ahmetboyoglu.com</p>
-      <hr style="border:0;border-top:1px solid #8b6f47;margin:10px 0">
-      <p style="margin:5px 0;font-size:13px"><strong>Hasta:</strong> ${_esc(hastaAd || '—')}${hastaMrn ? ` (MRN: ${_esc(hastaMrn)})` : ''}</p>
-      <p style="margin:5px 0;font-size:13px"><strong>Tarih:</strong> ${_esc(tarihDsp)}</p>
-      <p style="margin:5px 0;font-size:13px"><strong>Şablon:</strong> ${_esc(sablonAd)}</p>
-      <p style="margin:5px 0;font-size:13px"><strong>Model:</strong> ${_esc(modelKisa)} · ${inT.toLocaleString()} in + ${outT.toLocaleString()} out${ws ? ` · ${ws} web search` : ''}${maliyet ? ` · ${_esc(maliyet)}` : ''}</p>
-    </div>
+  const html = `<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <title>Klinik Pro — AI Konsültasyon</title>
+  <style>
+    body {
+      font-family: 'Arial', 'Segoe UI', sans-serif;
+      padding: 20mm;
+      max-width: 210mm;
+      margin: 0 auto;
+      color: #2d1f0f;
+      line-height: 1.6;
+    }
+    .header {
+      border: 2px solid #8b6f47;
+      padding: 15px;
+      margin-bottom: 20px;
+      background: #faf5ed;
+      border-radius: 8px;
+    }
+    .header h1 {
+      margin: 0 0 10px 0;
+      color: #8b6f47;
+      font-size: 20px;
+      letter-spacing: 0.3px;
+    }
+    .header p {
+      margin: 5px 0;
+      font-size: 13px;
+    }
+    .header .doktor {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .header .site {
+      color: #6b5640;
+    }
+    .header hr {
+      border: 0;
+      border-top: 1px solid #8b6f47;
+      margin: 10px 0;
+    }
+    .soru-bolum {
+      margin: 16px 0 20px;
+    }
+    .soru-bolum .label {
+      font-size: 11px;
+      font-weight: 700;
+      color: #8b6f47;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+    .soru-bolum .soru {
+      background: #fafafa;
+      border-left: 3px solid #8b6f47;
+      padding: 10px 14px;
+      font-size: 13px;
+      white-space: pre-wrap;
+      border-radius: 0 4px 4px 0;
+    }
+    .yanit {
+      font-size: 13px;
+      line-height: 1.7;
+    }
+    .yanit h1, .yanit h2, .yanit h3 {
+      color: #8b6f47;
+      margin-top: 20px;
+      margin-bottom: 8px;
+    }
+    .yanit h1 { font-size: 17px; }
+    .yanit h2 { font-size: 15px; }
+    .yanit h3 { font-size: 14px; }
+    .yanit ul, .yanit ol {
+      margin: 10px 0;
+      padding-left: 25px;
+    }
+    .yanit li {
+      margin: 5px 0;
+    }
+    .yanit p {
+      margin: 8px 0;
+    }
+    .yanit strong {
+      color: #2d1f0f;
+      font-weight: 700;
+    }
+    .yanit blockquote {
+      border-left: 3px solid #8b6f47;
+      padding-left: 12px;
+      margin: 10px 0;
+      color: #6b5640;
+      font-style: italic;
+    }
+    .yanit code {
+      background: #ebe0cc;
+      padding: 1px 5px;
+      border-radius: 3px;
+      font-family: Consolas, 'Courier New', monospace;
+      font-size: 12px;
+    }
+    .yanit a {
+      color: #8b6f47;
+      word-break: break-all;
+    }
+    .footer {
+      border-top: 1px solid #ccc;
+      margin-top: 30px;
+      padding-top: 10px;
+      font-size: 11px;
+      color: #888;
+      line-height: 1.4;
+    }
+    .footer p { margin: 4px 0; }
+    @media print {
+      body { padding: 10mm; }
+      .yanit h1, .yanit h2, .yanit h3 { page-break-after: avoid; }
+      .yanit li, .yanit p { page-break-inside: avoid; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🏥 KLİNİK PRO — AI KONSÜLTASYON RAPORU</h1>
+    <p class="doktor">Dr. Ahmet Boyoğlu — İç Hastalıkları Uzmanı</p>
+    <p class="site">ahmetboyoglu.com</p>
+    <hr>
+    <p><strong>Hasta:</strong> ${_esc(hastaAd || '—')}${hastaMrn ? ` (MRN: ${_esc(hastaMrn)})` : ''}</p>
+    <p><strong>Tarih:</strong> ${_esc(tarihDsp)}</p>
+    <p><strong>Şablon:</strong> ${_esc(sablonAd)}</p>
+    <p><strong>Model:</strong> ${_esc(modelKisa)} · ${inT.toLocaleString()} in + ${outT.toLocaleString()} out${ws ? ` · ${ws} web search` : ''}${maliyet ? ` · ${_esc(maliyet)}` : ''}</p>
+  </div>
 
-    <div style="margin-bottom:18px">
-      <div style="font-size:11px;font-weight:700;color:#8b6f47;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Soru</div>
-      <div style="background:#fafafa;border-left:3px solid #8b6f47;padding:10px 14px;font-size:13px;white-space:pre-wrap;border-radius:0 4px 4px 0">${_esc(kayit.soru || '')}</div>
-    </div>
+  <div class="soru-bolum">
+    <div class="label">Soru</div>
+    <div class="soru">${_esc(kayit.soru || '')}</div>
+  </div>
 
-    <div>
-      <div style="font-size:11px;font-weight:700;color:#8b6f47;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Yanıt</div>
-      <div class="pdf-markdown" style="font-size:13px;line-height:1.7">${_renderMd(kayit.yanit || '')}</div>
-    </div>
+  <div class="yanit">
+    <div class="label" style="font-size:11px;font-weight:700;color:#8b6f47;text-transform:uppercase;letter-spacing:0.5px;margin-bottom:6px">Yanıt</div>
+    ${yanitHtml}
+  </div>
 
-    <div style="border-top:1px solid #ccc;margin-top:30px;padding-top:10px;font-size:11px;color:#888;line-height:1.4">
-      <p style="margin:4px 0">⚠️ Bu çıktı klinik karar destek aracı olan AI yardımıyla üretilmiştir. Klinik karar sorumluluğu hekime aittir.</p>
-      <p style="margin:4px 0">Her öneri için güncel kılavuzları (UpToDate, ESC, AHA/ACC, ADA, KDIGO) doğrulayın. Hasta verileri KVKK kapsamında işlenir.</p>
-      <p style="margin:4px 0">Üretim: Klinik Pro v0.3.4.1 — ${_esc(tarihDsp)}</p>
-    </div>
-  `;
+  <div class="footer">
+    <p>⚠️ Bu çıktı klinik karar destek aracı olan AI yardımıyla üretilmiştir. Klinik karar sorumluluğu hekime aittir.</p>
+    <p>Her öneri için güncel kılavuzları (UpToDate, ESC, AHA/ACC, ADA, KDIGO) doğrulayın. Hasta verileri KVKK kapsamında işlenir.</p>
+    <p>Üretim: Klinik Pro v0.3.4.3 — ${_esc(tarihDsp)}</p>
+  </div>
+</body>
+</html>`;
 
-  // 3) Markdown alt elementlerine inline stil
-  const md = container.querySelector('.pdf-markdown');
-  if (md) {
-    md.querySelectorAll('h1,h2,h3').forEach(h => {
-      h.style.color = '#8b6f47';
-      h.style.marginTop = '20px';
-      h.style.marginBottom = '8px';
-      h.style.fontWeight = '700';
-      if (h.tagName === 'H1') h.style.fontSize = '17px';
-      if (h.tagName === 'H2') h.style.fontSize = '15px';
-      if (h.tagName === 'H3') h.style.fontSize = '14px';
-    });
-    md.querySelectorAll('ul,ol').forEach(l => { l.style.paddingLeft = '25px'; l.style.margin = '10px 0'; });
-    md.querySelectorAll('li').forEach(li => { li.style.margin = '5px 0'; });
-    md.querySelectorAll('p').forEach(p => { p.style.margin = '8px 0'; });
-    md.querySelectorAll('strong').forEach(s => { s.style.fontWeight = '700'; s.style.color = '#2d1f0f'; });
-    md.querySelectorAll('a').forEach(a => {
-      a.style.color = '#8b6f47';
-      a.style.wordBreak = 'break-all';
-    });
-    md.querySelectorAll('blockquote').forEach(b => {
-      b.style.borderLeft = '3px solid #8b6f47';
-      b.style.paddingLeft = '12px';
-      b.style.margin = '10px 0';
-      b.style.color = '#6b5640';
-      b.style.fontStyle = 'italic';
-    });
-    md.querySelectorAll('code').forEach(c => {
-      c.style.background = '#ebe0cc';
-      c.style.padding = '1px 5px';
-      c.style.borderRadius = '3px';
-      c.style.fontFamily = "Consolas, 'Courier New', monospace";
-      c.style.fontSize = '12px';
-    });
+  const win = window.open('', '_blank');
+  if (!win) {
+    throw new Error('Yeni pencere açılamadı. Tarayıcı popup engelleyicisini bu site için devre dışı bırakın.');
   }
+  win.document.open();
+  win.document.write(html);
+  win.document.close();
 
-  // 4) DOM'a ekle ve render için 250 ms bekle
-  document.body.appendChild(container);
-  await new Promise(r => setTimeout(r, 250));
+  // Render tamamlansın diye 500 ms bekle, sonra print dialog'u tetikle
+  setTimeout(() => {
+    try { win.focus(); win.print(); } catch { /* sessizce geç */ }
+  }, 500);
 
-  // 5) PDF oluştur — onclone callback klonda elementi GERÇEKTEN görünür yapar
-  const filename = `KlinikPro_${_safeName(hastaAd)}_${tarihFn}.pdf`;
-  const opt = {
-    margin:      [10, 10, 10, 10],
-    filename,
-    image:       { type: 'jpeg', quality: 0.98 },
-    html2canvas: {
-      scale: 2,
-      useCORS: true,
-      logging: false,
-      backgroundColor: '#ffffff',
-      onclone: function (clonedDoc) {
-        const clonedContainer = clonedDoc.querySelector('[data-pdf-container]');
-        if (clonedContainer) {
-          clonedContainer.style.opacity = '1';
-          clonedContainer.style.zIndex  = '999999';
-        }
-      }
-    },
-    jsPDF:       { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    pagebreak:   { mode: ['avoid-all', 'css', 'legacy'] }
-  };
-
-  try {
-    await window.html2pdf().set(opt).from(container).save();
-  } finally {
-    container.remove();
-  }
+  showToast('Yazdırma penceresi açıldı — "PDF olarak kaydet" seçin', 'info');
 }

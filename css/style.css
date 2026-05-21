@@ -1950,3 +1950,35 @@ body {
 }
 
 .ai-soru-toggle:hover { color: var(--accent-hover); }
+
+/* ============== AI v0.3.5 — Tetkik dosya bilgi satırı ============== */
+
+.ai-dosya-info {
+  margin: 0 0 12px;
+  padding: 8px 10px;
+  font-size: 12px;
+  line-height: 1.4;
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  border: 1px dashed var(--border);
+}
+
+.ai-dosya-info-bos {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+.ai-dosya-info-ok {
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.ai-dosya-info-warn {
+  color: var(--warning);
+  font-weight: 500;
+}
+
+.ai-dosya-info-cost {
+  color: var(--text-secondary);
+  font-size: 11px;
+}

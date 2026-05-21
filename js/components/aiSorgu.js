@@ -5,6 +5,7 @@ import { confirm } from './modal.js';
 import { formatTarih } from '../utils.js';
 import { copyMarkdown, copyPlainText } from '../utils/aiKopyala.js';
 import { exportPdf } from '../utils/aiPdf.js';
+import { gatherTetkikDosyalari, gatherTetkikDosyaMetadata } from '../utils/aiDosya.js';
 
 const WEB_SEARCH_USD = 0.01; // arama başına
 
@@ -186,13 +187,46 @@ function _fillTemplate(key, hastaId) {
 
 // --- API ---
 
-async function askAI({ modelKey, soru, webSearch }) {
+async function askAI({ modelKey, soru, webSearch, tetkikler }) {
+  console.log('[askAI] Başladı', { modelKey, tetkikSayisi: tetkikler?.length, webSearch });
+
   const model = MODELS[modelKey];
+  const isHaiku = modelKey === 'haiku';
+
+  // Son 5 tetkiğin desteklenen dosyalarını base64'le hazırla
+  const tumDosyalar = await gatherTetkikDosyalari(tetkikler || [], 5);
+  console.log('[askAI] Dosyalar hazırlandı:', {
+    count: tumDosyalar.length,
+    types: tumDosyalar.map(d => `${d.kind}:${d.ad}`),
+    boyutlar: tumDosyalar.map(d => `${d.ad}: ${d.data?.length || 0} chars`)
+  });
+
+  // Haiku PDF desteklemez — sadece image bırak
+  const eklenecekDosyalar = isHaiku ? tumDosyalar.filter(d => d.kind === 'image') : tumDosyalar;
+  const haikuAtlanan = isHaiku ? tumDosyalar.filter(d => d.kind === 'document').length : 0;
+  console.log('[askAI] Haiku filtre sonrası:', { eklenecek: eklenecekDosyalar.length, haikuAtlanan });
+
+  // Content array: önce belgeler/görüntüler, sonra metin
+  const contentBlocks = eklenecekDosyalar.map(d => ({
+    type: d.kind, // 'document' veya 'image'
+    source: {
+      type:       'base64',
+      media_type: d.mediaType,
+      data:       d.data
+    }
+  }));
+  contentBlocks.push({ type: 'text', text: soru });
+
+  console.log('[askAI] Content array hazır:', {
+    blokSayisi: contentBlocks.length,
+    types: contentBlocks.map(b => b.type)
+  });
+
   const body = {
     model:      model.id,
     max_tokens: webSearch ? 4096 : 2048,
     system:     webSearch ? (SYSTEM_PROMPT_BASE + WEB_SEARCH_SYSTEM_EK) : SYSTEM_PROMPT_BASE,
-    messages:   [{ role: 'user', content: soru }]
+    messages:   [{ role: 'user', content: contentBlocks }]
   };
   if (webSearch) {
     body.tools = [{
@@ -202,10 +236,13 @@ async function askAI({ modelKey, soru, webSearch }) {
     }];
   }
 
+  const bodyStr = JSON.stringify(body);
+  console.log('[askAI] Body boyutu:', bodyStr.length, 'bytes — Worker\'a gönderiliyor');
+
   const r = await fetch(WORKER_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body)
+    body: bodyStr
   });
   if (!r.ok) {
     const t = await r.text().catch(() => '');
@@ -234,11 +271,25 @@ async function askAI({ modelKey, soru, webSearch }) {
     ).length;
   }
 
+  const pdfCount   = eklenecekDosyalar.filter(d => d.kind === 'document').length;
+  const imageCount = eklenecekDosyalar.filter(d => d.kind === 'image').length;
+
+  console.log('[askAI] Response geldi:', {
+    inputTokens:  data.usage?.input_tokens,
+    outputTokens: data.usage?.output_tokens,
+    pdfCount,
+    imageCount,
+    webSearchCount
+  });
+
   return {
     text,
     inputTokens:    data.usage?.input_tokens  || 0,
     outputTokens:   data.usage?.output_tokens || 0,
     webSearchCount,
+    pdfCount,
+    imageCount,
+    haikuAtlanan,
     apiModel:       data.model || model.id
   };
 }
@@ -247,6 +298,51 @@ function _maliyet(modelKey, inT, outT, webSearchCount = 0) {
   const m = MODELS[modelKey];
   if (!m) return 0;
   return inT * m.inUsd + outT * m.outUsd + (webSearchCount || 0) * WEB_SEARCH_USD;
+}
+
+function _formatDosyaMeta(pdf, img) {
+  const parts = [];
+  if (pdf > 0) parts.push(`📄 ${pdf} PDF`);
+  if (img > 0) parts.push(`🖼 ${img} img`);
+  return parts.join(' + ');
+}
+
+// Form altındaki dosya önizleme satırını günceller (fetch yok, sadece sayım)
+function _updateDosyaInfo(hastaId) {
+  const el = document.querySelector('[data-dosya-info]');
+  if (!el) return;
+
+  const sel       = document.getElementById('aiModelSelect');
+  const modelKey  = sel?.value || 'sonnet';
+  const isHaiku   = modelKey === 'haiku';
+  const tetkikler = _items('tetkikler', hastaId);
+  const meta      = gatherTetkikDosyaMetadata(tetkikler, 5);
+
+  if (meta.pdfCount === 0 && meta.imageCount === 0) {
+    el.innerHTML = `<span class="ai-dosya-info-bos">📎 Eklenecek tetkik dosyası yok</span>`;
+    return;
+  }
+
+  const parts = [];
+  if (meta.pdfCount > 0)   parts.push(`${meta.pdfCount} PDF`);
+  if (meta.imageCount > 0) parts.push(`${meta.imageCount} görüntü`);
+  let html = `<span class="ai-dosya-info-ok">📎 ${parts.join(' + ')} eklenecek</span>`;
+
+  if (isHaiku && meta.pdfCount > 0) {
+    html += ` <span class="ai-dosya-info-warn">(Haiku PDF desteklemez — ${meta.pdfCount} PDF atlanacak)</span>`;
+  }
+
+  // Kaba token tahmini: PDF ~1500/sayfa-yokken-ortalama, image ~800
+  const dahilPdf = isHaiku ? 0 : meta.pdfCount;
+  const tahminiToken = dahilPdf * 1500 + meta.imageCount * 800;
+  const m = MODELS[modelKey];
+  const tahminiUsd = m ? tahminiToken * m.inUsd : 0;
+  if (tahminiToken > 0) {
+    const txt = tahminiUsd < 0.01 ? '<$0.01' : `~$${tahminiUsd.toFixed(3)}`;
+    html += ` <span class="ai-dosya-info-cost">(${txt} ek)</span>`;
+  }
+
+  el.innerHTML = html;
 }
 
 // --- Markdown render ---
@@ -302,6 +398,8 @@ export function renderAiPanel(hastaId) {
                     style="resize:vertical;min-height:180px;font-family:inherit;line-height:1.5"></textarea>
         </div>
 
+        <div class="ai-dosya-info" data-dosya-info></div>
+
         <button class="btn btn-primary ai-sor-btn" id="aiSorBtn" type="button">
           <span id="aiSorBtnLabel">Konsültasyon İste</span>
         </button>
@@ -330,9 +428,12 @@ function _renderAktifYanit() {
   }
   if (!_aktifYanit) return '';
   const m = MODELS[_aktifYanit.modelKey];
-  const ws = _aktifYanit.webSearchCount || 0;
+  const ws  = _aktifYanit.webSearchCount || 0;
+  const pdf = _aktifYanit.pdfCount       || 0;
+  const img = _aktifYanit.imageCount     || 0;
   const maliyet = _maliyet(_aktifYanit.modelKey, _aktifYanit.inputTokens, _aktifYanit.outputTokens, ws);
   const maliyetTxt = maliyet < 0.01 ? '<$0.01' : `~$${maliyet.toFixed(2)}`;
+  const dosyaTxt = _formatDosyaMeta(pdf, img);
   return `
     <div class="card ai-yanit-card">
       <div class="ai-yanit-meta">
@@ -340,6 +441,7 @@ function _renderAktifYanit() {
           <strong>${m.kisa}</strong>
           <span class="ai-yanit-meta-sep">•</span>
           <span>${_aktifYanit.inputTokens.toLocaleString()} in + ${_aktifYanit.outputTokens.toLocaleString()} out</span>
+          ${dosyaTxt ? `<span class="ai-yanit-meta-sep">•</span><span>${dosyaTxt}</span>` : ''}
           ${ws ? `<span class="ai-yanit-meta-sep">•</span><span>${ws} web search</span>` : ''}
           <span class="ai-yanit-meta-sep">•</span>
           <span>${maliyetTxt}</span>
@@ -413,6 +515,12 @@ export function attachAiListeners(hastaId) {
     wsBox.addEventListener('change', e => { _webSearchEnabled = e.target.checked; });
   }
 
+  // Model değişince dosya bilgi satırını yenile (Haiku uyarısı + maliyet tahmini değişir)
+  document.getElementById('aiModelSelect')?.addEventListener('change', () => _updateDosyaInfo(hastaId));
+
+  // İlk açılışta dosya bilgi satırını bas
+  _updateDosyaInfo(hastaId);
+
   // Konsültasyon İste
   document.getElementById('aiSorBtn')?.addEventListener('click', () => _gonder(hastaId));
 
@@ -480,7 +588,8 @@ async function _gonder(hastaId) {
   _refreshYanitSlot(hastaId);
 
   try {
-    const sonuc = await askAI({ modelKey, soru, webSearch: _webSearchEnabled });
+    const tetkikler = _items('tetkikler', hastaId);
+    const sonuc = await askAI({ modelKey, soru, webSearch: _webSearchEnabled, tetkikler });
     _aktifYanit = {
       hastaId,
       modelKey,
@@ -490,8 +599,14 @@ async function _gonder(hastaId) {
       inputTokens:    sonuc.inputTokens,
       outputTokens:   sonuc.outputTokens,
       webSearchCount: sonuc.webSearchCount,
+      pdfCount:       sonuc.pdfCount,
+      imageCount:     sonuc.imageCount,
+      haikuAtlanan:   sonuc.haikuAtlanan,
       apiModel:       sonuc.apiModel
     };
+    if (sonuc.haikuAtlanan > 0) {
+      showToast(`${sonuc.haikuAtlanan} PDF Haiku tarafından desteklenmiyor — atlandı`, 'warning');
+    }
   } catch (e) {
     showToast(`Hata: ${e.message}`, 'error');
     _aktifYanit = null;
@@ -580,6 +695,8 @@ async function _kaydet(hastaId) {
       inputTokens:     _aktifYanit.inputTokens,
       outputTokens:    _aktifYanit.outputTokens,
       webSearchCount:  ws,
+      pdfCount:        _aktifYanit.pdfCount   || 0,
+      imageCount:      _aktifYanit.imageCount || 0,
       tahminiMaliyet:  Number(maliyet.toFixed(6))
     });
     showToast('Konsültasyon kaydedildi', 'success');
@@ -600,6 +717,9 @@ function _openGecmisModal(kayit, hastaId) {
   const inT  = kayit.inputTokens  || 0;
   const outT = kayit.outputTokens || 0;
   const ws   = kayit.webSearchCount || 0;
+  const pdf  = kayit.pdfCount       || 0;
+  const img  = kayit.imageCount     || 0;
+  const dosyaTxt = _formatDosyaMeta(pdf, img);
   const maliyet = (kayit.tahminiMaliyet != null)
     ? (kayit.tahminiMaliyet < 0.01 ? '<$0.01' : `~$${kayit.tahminiMaliyet.toFixed(2)}`)
     : '';
@@ -623,6 +743,7 @@ function _openGecmisModal(kayit, hastaId) {
         <span>${tarihStr}</span>
         <span class="ai-yanit-meta-sep">•</span>
         <span>${inT.toLocaleString()} in + ${outT.toLocaleString()} out</span>
+        ${dosyaTxt ? `<span class="ai-yanit-meta-sep">•</span><span>${dosyaTxt}</span>` : ''}
         ${ws ? `<span class="ai-yanit-meta-sep">•</span><span>${ws} web search</span>` : ''}
         ${maliyet ? `<span class="ai-yanit-meta-sep">•</span><span>${maliyet}</span>` : ''}
       </div>
@@ -711,4 +832,9 @@ export function refreshAiGecmis(hastaId) {
   if (!list) return;
   list.innerHTML = _renderGecmis(hastaId);
   _attachGecmisListeners(hastaId);
+}
+
+// Tetkikler değişince — form altındaki dosya önizleme satırını yenile
+export function refreshAiDosyaInfo(hastaId) {
+  _updateDosyaInfo(hastaId);
 }

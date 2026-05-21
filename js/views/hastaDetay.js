@@ -11,7 +11,7 @@ import { openTetkikForm }  from '../components/tetkikForm.js';
 import { confirm }         from '../components/modal.js';
 import { showToast }       from '../components/toast.js';
 import { formatTarih }     from '../utils.js';
-import { renderAiPanel, attachAiListeners, resetAi, refreshAiGecmis } from '../components/aiSorgu.js';
+import { renderAiPanel, attachAiListeners, resetAi, refreshAiGecmis, refreshAiDosyaInfo } from '../components/aiSorgu.js';
 
 const SEMPTOM_FIELDS = [
   { key: 'sikayetler', label: 'Başvuru Şikayetleri', icon: '📋' },
@@ -72,7 +72,10 @@ function _mount() {
     subscribe('ilaclar',   () => _refreshSection('hdIlaclarList',  _renderIlaclarList)),
     subscribe('alerjiler', () => _refreshSection('hdAlerjiList',   _renderAlerjiList)),
     subscribe('notlar',    () => _refreshSection('hdNotlarList',   _renderNotlarList)),
-    subscribe('tetkikler', () => _refreshSection('hdTetkiklerList', _renderTetkiklerList)),
+    subscribe('tetkikler', () => {
+      _refreshSection('hdTetkiklerList', _renderTetkiklerList);
+      refreshAiDosyaInfo(_hastaId);
+    }),
     subscribe('aiSorgulari', () => _refreshAiTab())
   ];
 }

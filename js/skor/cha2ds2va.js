@@ -10,12 +10,17 @@ export default {
   link: 'https://academic.oup.com/eurheartj/article/45/36/3314/7738779',
 
   inputs: [
-    { key: 'kky',     tip: 'bool', label: 'Konjestif kalp yetmezliği / LV disfonksiyonu' },
-    { key: 'ht',      tip: 'bool', label: 'Hipertansiyon' },
-    { key: 'yas',     tip: 'sayi', label: 'Yaş', min: 0, max: 120, autofill: 'yas' },
-    { key: 'dm',      tip: 'bool', label: 'Diabetes mellitus' },
-    { key: 'inme',    tip: 'bool', label: 'İnme / TIA / tromboemboli öyküsü' },
-    { key: 'vask',    tip: 'bool', label: 'Vasküler hastalık (KAH, PAH, aort plağı)' }
+    { key: 'kky',  tip: 'bool', label: 'Konjestif kalp yetmezliği / LV disfonksiyonu',
+      autofillTanilar: ['kalp yetmezliği', 'hfref', 'hfpef', 'heart failure', 'lv disfonksiyon', 'lvdd', 'düşük ef', 'ef %2', 'ef %3', 'ef %4'] },
+    { key: 'ht',   tip: 'bool', label: 'Hipertansiyon',
+      autofillTanilar: ['hipertansiyon', 'hypertension', 'ht'] },
+    { key: 'yas',  tip: 'sayi', label: 'Yaş', min: 0, max: 120, autofill: 'yas' },
+    { key: 'dm',   tip: 'bool', label: 'Diabetes mellitus',
+      autofillTanilar: ['diyabet', 'diabetes', 't1dm', 't2dm', 'şeker hastalığı'] },
+    { key: 'inme', tip: 'bool', label: 'İnme / TIA / sistemik emboli öyküsü',
+      autofillTanilar: ['inme', 'svo', 'tia', 'serebrovasküler', 'iskemik atak', 'sistemik emboli', 'arteriyel emboli'] },
+    { key: 'vask', tip: 'bool', label: 'Vasküler hastalık (KAH, PAH, aort plağı)',
+      autofillTanilar: ['koroner', 'kah', 'mi', 'miyokard infarktüs', 'pci', 'cabg', 'stent', 'periferik arter', 'pah', 'aortik plak', 'karotid'] }
   ],
 
   calc(v) {

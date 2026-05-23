@@ -10,15 +10,22 @@ export default {
   link: 'https://www.chestnet.org/journal/articles/article-detail?ArticleID=1081',
 
   inputs: [
-    { key: 'ht',          tip: 'bool', label: 'Kontrolsüz HT (sistolik >160 mmHg)' },
-    { key: 'renal',       tip: 'bool', label: 'Anormal renal fonksiyon (diyaliz, transplant, Cr ≥2.26 mg/dL)' },
-    { key: 'hepatik',     tip: 'bool', label: 'Anormal karaciğer fonksiyonu (siroz, Bil >2x, AST/ALT >3x)' },
-    { key: 'inme',        tip: 'bool', label: 'İnme öyküsü' },
-    { key: 'kanama',      tip: 'bool', label: 'Kanama öyküsü / predispozisyon' },
-    { key: 'labilInr',    tip: 'bool', label: 'Labil INR (TTR <%60, sadece VKA için)' },
-    { key: 'yas',         tip: 'sayi', label: 'Yaş', min: 0, max: 120, autofill: 'yas' },
-    { key: 'ilac',        tip: 'bool', label: 'Kanamaya yatkın ilaç (NSAİD, antiplatelet)' },
-    { key: 'alkol',       tip: 'bool', label: 'Alkol kullanımı (≥8 birim/hafta)' }
+    // HT için autofill yok: sistolik >160 ek bulgu gerektirir
+    { key: 'ht',       tip: 'bool', label: 'Kontrolsüz HT (sistolik >160 mmHg)' },
+    { key: 'renal',    tip: 'bool', label: 'Anormal renal fonksiyon (diyaliz, transplant, Cr ≥2.26 mg/dL)',
+      autofillTanilar: ['kbh', 'kronik böbrek', 'ckd', 'son dönem böbrek', 'diyaliz', 'transplant'] },
+    { key: 'hepatik',  tip: 'bool', label: 'Anormal karaciğer fonksiyonu (siroz, Bil >2x, AST/ALT >3x)',
+      autofillTanilar: ['siroz', 'cirrhosis', 'karaciğer yetmezliği', 'kc yetmezliği', 'child b', 'child c', 'meld'] },
+    { key: 'inme',     tip: 'bool', label: 'İnme öyküsü',
+      autofillTanilar: ['inme', 'svo', 'tia', 'serebrovasküler', 'iskemik atak'] },
+    { key: 'kanama',   tip: 'bool', label: 'Kanama öyküsü / predispozisyon',
+      autofillTanilar: ['gis kanama', 'hematemez', 'melena', 'kanama diatezi'] },
+    // labilInr: warfarin altında olsa bile TTR bilgisi olmadan flag etmek yanıltıcı
+    { key: 'labilInr', tip: 'bool', label: 'Labil INR (TTR <%60, sadece VKA için)' },
+    { key: 'yas',      tip: 'sayi', label: 'Yaş', min: 0, max: 120, autofill: 'yas' },
+    { key: 'ilac',     tip: 'bool', label: 'Kanamaya yatkın ilaç (NSAİD, antiplatelet)',
+      autofillIlaclar: ['aspirin', 'asetilsalisilik', 'klopidogrel', 'tikagrelor', 'prasugrel', 'nsaid', 'naproksen', 'ibuprofen', 'diklofenak', 'meloksikam'] },
+    { key: 'alkol',    tip: 'bool', label: 'Alkol kullanımı (≥8 birim/hafta)' }
   ],
 
   calc(v) {

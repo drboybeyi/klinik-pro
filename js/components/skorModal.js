@@ -1,10 +1,64 @@
 // Generic skor hesaplama modalı — herhangi bir skor modülünü yükler
 // Hasta verilmişse yaş/cinsiyet otomatik dolar ve "Kaydet" aktiftir.
+// Bool input'lar için: skor modülünde tanımlı autofillTanilar / autofillIlaclar
+// keyword listeleriyle hastanın tanıları + klinikOzet ve ilaçları taranır.
 
 import { saveSkor } from '../db.js';
+import { getState } from '../state.js';
 import { showToast } from './toast.js';
 
 let _overlay = null;
+// Mevcut modal için: input key → eşleşmenin kaynağı (gösterim için)
+let _autofillKaynak = {};
+
+// Türkçe karakter-aware match.
+//   Kısa keyword (<4 char, örn. 'mi','ht','kah'): tam kelime boundary (önce VE sonra non-word)
+//     → 'mi' "MI nedeniyle" ile match olur, "Mikroalbüminüri" ile olmaz.
+//   Uzun keyword (≥4 char, örn. 'inme','diyabet'): sadece önce non-word (suffix esnek)
+//     → 'diyabet' "Diyabetik" ile match olur, "antidiyabetik" ile olmaz.
+function _matchKeyword(text, keyword) {
+  if (!text || !keyword) return false;
+  const t = text.toLowerCase();
+  const k = keyword.toLowerCase();
+  const isWord = c => c && /[a-z0-9çğıöşü]/i.test(c);
+  const katı = k.length < 4;
+  let idx = 0;
+  while ((idx = t.indexOf(k, idx)) !== -1) {
+    const before = idx > 0 ? t[idx - 1] : '';
+    const after  = idx + k.length < t.length ? t[idx + k.length] : '';
+    const beforeOk = !isWord(before);
+    const afterOk  = !isWord(after);
+    if (katı ? (beforeOk && afterOk) : beforeOk) return true;
+    idx += k.length;
+  }
+  return false;
+}
+
+function _matchListe(items, keywords, prop) {
+  if (!keywords?.length || !items?.length) return null;
+  for (const item of items) {
+    const text = item[prop] || '';
+    for (const k of keywords) {
+      if (_matchKeyword(text, k)) return text;
+    }
+  }
+  return null;
+}
+
+function _matchMetin(metin, keywords) {
+  if (!keywords?.length || !metin) return null;
+  for (const k of keywords) {
+    if (_matchKeyword(metin, k)) {
+      // Kaynak olarak keyword'ün geçtiği kısa parçayı döndür
+      const t = metin;
+      const idx = t.toLowerCase().indexOf(k.toLowerCase());
+      const start = Math.max(0, idx - 12);
+      const end = Math.min(t.length, idx + k.length + 18);
+      return `…${t.slice(start, end).trim()}…`;
+    }
+  }
+  return null;
+}
 
 /**
  * @param {Object} skor     skor modülü (SKORLAR registry'den)
@@ -15,17 +69,62 @@ export function openSkorModal(skor, hasta = null, mevcut = null) {
   _overlay?.remove();
   _overlay = document.createElement('div');
   _overlay.className = 'modal-overlay skor-modal';
+  _autofillKaynak = {};
 
-  // Başlangıç değerleri: önce mevcut kaydın inputs'u, sonra autofill, sonra boş
+  // Hasta varsa tanılar + ilaçlar — tanılar/ilaçlar ayrı koleksiyon
+  const tanilar = hasta
+    ? Object.values(getState('tanilar') || {}).filter(t => t.hastaId === hasta.id)
+    : [];
+  const ilaclar = hasta
+    ? Object.values(getState('ilaclar') || {}).filter(i => i.hastaId === hasta.id)
+    : [];
+  // Tanı listesi + klinikOzet + ozgecmis (3 alan) — autofill kapsamı
+  // hikaye/sikayetler/fmBulgular dahil edilmedi: akut bulgular, false positive riski yüksek
+  const ozetMetinler = [
+    { etiket: 'klinik özet', metin: hasta?.klinikOzet || '' },
+    { etiket: 'özgeçmiş',    metin: hasta?.ozgecmis   || '' }
+  ].filter(o => o.metin);
+
+  // Başlangıç değerleri:
+  //   1) Düzenleme ise mevcut.inputs (autofill atlanır — kullanıcının onayladığı snapshot)
+  //   2) Direct field autofill (hasta.yas → input.autofill='yas')
+  //   3) Bool için tanı/klinikOzet/özgeçmiş/ilaç keyword eşleşmesi
+  //   4) Boş
   const baslangic = {};
   for (const inp of skor.inputs) {
     if (mevcut?.inputs && mevcut.inputs[inp.key] !== undefined) {
       baslangic[inp.key] = mevcut.inputs[inp.key];
-    } else if (inp.autofill && hasta && hasta[inp.autofill] !== undefined) {
-      baslangic[inp.key] = hasta[inp.autofill];
-    } else {
-      baslangic[inp.key] = inp.tip === 'bool' ? null : '';
+      continue;
     }
+    if (inp.autofill && hasta && hasta[inp.autofill] !== undefined) {
+      baslangic[inp.key] = hasta[inp.autofill];
+      continue;
+    }
+    if (inp.tip === 'bool' && hasta) {
+      let kaynak = null;
+      if (inp.autofillTanilar) {
+        const t = _matchListe(tanilar, inp.autofillTanilar, 'tanim');
+        if (t) kaynak = `tanı: ${t}`;
+      }
+      if (!kaynak && inp.autofillTanilar) {
+        for (const o of ozetMetinler) {
+          const m = _matchMetin(o.metin, inp.autofillTanilar);
+          if (m) { kaynak = `${o.etiket}: ${m}`; break; }
+        }
+      }
+      if (!kaynak && inp.autofillIlaclar) {
+        const i = _matchListe(ilaclar, inp.autofillIlaclar, 'ad');
+        if (i) kaynak = `ilaç: ${i}`;
+      }
+      if (kaynak) {
+        baslangic[inp.key] = true;
+        _autofillKaynak[inp.key] = kaynak;
+      } else {
+        baslangic[inp.key] = null;
+      }
+      continue;
+    }
+    baslangic[inp.key] = inp.tip === 'bool' ? null : '';
   }
 
   _overlay.innerHTML = `
@@ -88,9 +187,11 @@ export function openSkorModal(skor, hasta = null, mevcut = null) {
 function _renderInput(inp, value) {
   if (inp.tip === 'bool') {
     const aktif = value === true ? 'evet' : value === false ? 'hayir' : null;
+    const kaynak = _autofillKaynak[inp.key];
     return `
       <div class="skor-input-row">
         <label class="skor-input-label">${inp.label}</label>
+        ${kaynak ? `<div class="skor-autofill-rozet" title="Otomatik işaretlendi — kontrol edip değiştirebilirsin">✓ otomatik · ${kaynak}</div>` : ''}
         <div class="skor-bool-grp" data-key="${inp.key}">
           <button type="button" class="skor-bool-btn ${aktif === 'hayir' ? 'active' : ''}" data-v="0">Hayır</button>
           <button type="button" class="skor-bool-btn ${aktif === 'evet'  ? 'active' : ''}" data-v="1">Evet</button>

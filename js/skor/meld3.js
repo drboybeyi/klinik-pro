@@ -26,7 +26,8 @@ export default {
     { key: 'kreatinin', tip: 'ondalik', label: 'Serum kreatinin', birim: 'mg/dL', min: 0.1, max: 15, adim: 0.01 },
     { key: 'sodyum',    tip: 'sayi',    label: 'Serum sodyum',    birim: 'mEq/L', min: 100, max: 160 },
     { key: 'albumin',   tip: 'ondalik', label: 'Serum albümin',   birim: 'g/dL',  min: 0.5, max: 7,  adim: 0.1 },
-    { key: 'diyaliz',   tip: 'bool',    label: 'Haftada ≥2 diyaliz veya 24 sa CRRT (son hafta)' }
+    { key: 'diyaliz',   tip: 'bool',    label: 'Haftada ≥2 diyaliz veya 24 sa CRRT (son hafta)',
+      autofillTanilar: ['diyaliz', 'hemodiyaliz', 'crrt'] }
   ],
 
   calc(v) {

@@ -1,13 +1,16 @@
 import { getState, subscribe } from '../state.js';
 import {
   deleteHastaWithRelated, saveAlerji, deleteAlerji,
-  deleteTani, deleteIlac, deleteNot, deleteTetkik, updateHasta
+  deleteTani, deleteIlac, deleteNot, deleteTetkik, deleteSkor, updateHasta
 } from '../db.js';
 import { openHastaForm }   from '../components/hastaForm.js';
 import { openTaniForm }    from '../components/taniForm.js';
 import { openIlacForm }    from '../components/ilacForm.js';
 import { openNotForm }     from '../components/notForm.js';
 import { openTetkikForm }  from '../components/tetkikForm.js';
+import { openSkorModal }       from '../components/skorModal.js';
+import { openSkorSecimModal }  from '../components/skorSecimModal.js';
+import { getSkor, SKORLAR, KATEGORI_LABEL } from '../skor/index.js';
 import { confirm }         from '../components/modal.js';
 import { showToast }       from '../components/toast.js';
 import { formatTarih }     from '../utils.js';
@@ -76,6 +79,7 @@ function _mount() {
       _refreshSection('hdTetkiklerList', _renderTetkiklerList);
       refreshAiDosyaInfo(_hastaId);
     }),
+    subscribe('skorlar',   () => _refreshSection('hdSkorlarList', _renderSkorlarList)),
     subscribe('aiSorgulari', () => _refreshAiTab())
   ];
 }
@@ -108,6 +112,10 @@ function _tetkikler()     {
     return (b.tarih || '').localeCompare(a.tarih || '');
   });
 }
+function _skorlar()       {
+  return _items('skorlar').sort((a, b) =>
+    (b.olusturmaTarih || '').localeCompare(a.olusturmaTarih || ''));
+}
 function _sevOrd(s)       { return {kritik:0,izlem:1,stabil:2}[s] ?? 1; }
 
 // --- Full build ---
@@ -133,6 +141,7 @@ function _buildAll() {
       <div class="top-tab ${_aktifTab==='ozet'       ? 'active':''}" data-tab="ozet">Özet</div>
       <div class="top-tab ${_aktifTab==='semptomlar' ? 'active':''}" data-tab="semptomlar">Semptomlar</div>
       <div class="top-tab ${_aktifTab==='tetkikler'  ? 'active':''}" data-tab="tetkikler">Tetkikler</div>
+      <div class="top-tab ${_aktifTab==='skorlar'    ? 'active':''}" data-tab="skorlar">Skorlar</div>
       <div class="top-tab ${_aktifTab==='notlar'     ? 'active':''}" data-tab="notlar">Notlar</div>
       <div class="top-tab ${_aktifTab==='ai'         ? 'active':''}" data-tab="ai">AI</div>
     </div>
@@ -141,6 +150,7 @@ function _buildAll() {
       <div id="hdPanelOzet"       style="display:${_aktifTab==='ozet'       ?'block':'none'}">${_renderOzetPanel(hasta)}</div>
       <div id="hdPanelSemptomlar" style="display:${_aktifTab==='semptomlar' ?'block':'none'}">${_renderMetinPanel(hasta, SEMPTOM_FIELDS)}</div>
       <div id="hdPanelTetkikler"  style="display:${_aktifTab==='tetkikler'  ?'block':'none'}">${_renderTetkiklerPanel()}</div>
+      <div id="hdPanelSkorlar"    style="display:${_aktifTab==='skorlar'    ?'block':'none'}">${_renderSkorlarPanel()}</div>
       <div id="hdPanelNotlar"     style="display:${_aktifTab==='notlar'     ?'block':'none'}">${_renderNotlarPanel()}</div>
       <div id="hdPanelAi"         style="display:${_aktifTab==='ai'         ?'block':'none'}">${renderAiPanel(_hastaId)}</div>
     </div>
@@ -252,6 +262,63 @@ function _renderTetkiklerPanel() {
       <div id="hdTetkiklerList">${_renderTetkiklerList()}</div>
     </div>
   `;
+}
+
+function _renderSkorlarPanel() {
+  return `
+    <div class="view-container">
+      <div class="skor-panel-header">
+        <div class="skor-panel-aciklama">5 klinik skor — yaş ve cinsiyet otomatik dolar</div>
+        <button class="btn btn-primary" id="hdSkorYeni"
+                style="min-height:36px;padding:8px 16px;font-size:13px">+ Yeni Hesaplama</button>
+      </div>
+
+      <div class="skor-katalog">
+        ${SKORLAR.map(s => `
+          <button class="skor-katalog-kart skor-kat-${s.kategori}" data-yeni-skor="${s.id}">
+            <div class="skor-katalog-ad">${s.ad}</div>
+            <div class="skor-katalog-aciklama">${s.aciklama}</div>
+          </button>
+        `).join('')}
+      </div>
+
+      <div class="section-header" style="margin-top:18px">
+        <span class="section-title">Geçmiş hesaplamalar</span>
+      </div>
+      <div id="hdSkorlarList">${_renderSkorlarList()}</div>
+    </div>
+  `;
+}
+
+function _renderSkorlarList() {
+  const list = _skorlar();
+  if (!list.length) return `
+    <div class="empty-state" style="padding:32px 0">
+      <div class="empty-icon">🧮</div>
+      <div class="empty-title">Henüz skor kaydı yok</div>
+      <div class="empty-sub">Yukarıdaki kartlardan birini seçerek hesaplama yapın</div>
+    </div>
+  `;
+  return list.map(s => `
+    <div class="skor-kayit-kart skor-kat-${s.kategori || 'kardiyo'}">
+      <div class="skor-kayit-header">
+        <div class="skor-kayit-meta">
+          <span class="skor-kayit-tarih">${formatTarih(s.tarih) || formatTarih(s.olusturmaTarih)}</span>
+          <span class="skor-kayit-ad">${s.skorAd}</span>
+          <span class="badge seviye-${s.seviye}">${s.puan}${s.birim ? ' ' + s.birim : ''}</span>
+        </div>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button class="icon-btn"        data-edit-skor="${s.id}" title="Tekrar hesapla">✏️</button>
+          <button class="icon-btn danger" data-del-skor="${s.id}"  title="Sil">🗑️</button>
+        </div>
+      </div>
+      <div class="skor-kayit-body">
+        <div class="skor-kayit-etiket">${s.etiket}</div>
+        ${s.mesaj ? `<div class="skor-kayit-mesaj">${s.mesaj}</div>` : ''}
+        <div class="skor-kayit-kilavuz">${s.kilavuz || ''}</div>
+      </div>
+    </div>
+  `).join('');
 }
 
 // --- List renderers ---
@@ -452,6 +519,9 @@ function _attachListeners() {
   document.getElementById('hdTetkikEkle')?.addEventListener('click', () =>
     openTetkikForm(_hastaId, null));
 
+  document.getElementById('hdSkorYeni')?.addEventListener('click', () =>
+    openSkorSecimModal(_hasta()));
+
   // Event delegation — tanı/ilaç/alerji/not/tetkik edit+delete
   _overlay.addEventListener('click', _handleDelegated);
 
@@ -475,10 +545,28 @@ function _handleDelegated(e) {
   const el = e.target.closest(
     '[data-edit-tani],[data-del-tani],[data-edit-ilac],[data-del-ilac],' +
     '[data-del-alerji],[data-del-not],[data-edit-metin],' +
-    '[data-edit-tetkik],[data-del-tetkik]'
+    '[data-edit-tetkik],[data-del-tetkik],' +
+    '[data-yeni-skor],[data-edit-skor],[data-del-skor]'
   );
   if (!el) return;
   e.stopPropagation();
+
+  if (el.dataset.yeniSkor) {
+    const skor = getSkor(el.dataset.yeniSkor);
+    if (skor) openSkorModal(skor, _hasta());
+    return;
+  }
+  if (el.dataset.editSkor) {
+    const kayit = _skorlar().find(x => x.id === el.dataset.editSkor);
+    if (!kayit) return;
+    const skor = getSkor(kayit.skorId);
+    if (skor) openSkorModal(skor, _hasta(), kayit);
+    return;
+  }
+  if (el.dataset.delSkor) {
+    _confirmDelete('skor kaydını', () => deleteSkor(el.dataset.delSkor), 'Skor silindi');
+    return;
+  }
 
   if (el.dataset.editTani) {
     const t = _tanilar().find(x => x.id === el.dataset.editTani);
@@ -523,7 +611,7 @@ function _switchTab(tab) {
   _aktifTab = tab;
   _overlay.querySelectorAll('.top-tab').forEach(t =>
     t.classList.toggle('active', t.dataset.tab === tab));
-  ['ozet', 'semptomlar', 'tetkikler', 'notlar', 'ai'].forEach(name => {
+  ['ozet', 'semptomlar', 'tetkikler', 'skorlar', 'notlar', 'ai'].forEach(name => {
     const panel = document.getElementById(`hdPanel${_capitalize(name)}`);
     if (panel) panel.style.display = name === tab ? 'block' : 'none';
   });
@@ -531,6 +619,7 @@ function _switchTab(tab) {
   if (tab === 'ozet')      _attachOzetListeners();
   if (tab === 'notlar')    _attachNotlarListeners();
   if (tab === 'tetkikler') _attachTetkiklerListeners();
+  if (tab === 'skorlar')   _attachSkorlarListeners();
   if (tab === 'ai')        attachAiListeners(_hastaId);
 }
 
@@ -585,6 +674,10 @@ function _attachNotlarListeners() {
 
 function _attachTetkiklerListeners() {
   document.getElementById('hdTetkikEkle')?.addEventListener('click', () => openTetkikForm(_hastaId, null));
+}
+
+function _attachSkorlarListeners() {
+  document.getElementById('hdSkorYeni')?.addEventListener('click', () => openSkorSecimModal(_hasta()));
 }
 
 // --- Inline Alerji Modal ---

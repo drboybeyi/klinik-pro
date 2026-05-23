@@ -2204,3 +2204,419 @@ body {
   opacity: 0.72;
   font-size: 13px;
 }
+
+/* ============================================================
+   v0.4-α Klinik Skorlar
+   ============================================================ */
+
+/* Kategori renkleri (sol kenar + buton tonu) */
+.skor-kat-kardiyo { --skor-renk: #9a4a3a; --skor-renk-bg: #fff0ee; }
+.skor-kat-renal   { --skor-renk: #2a7a5a; --skor-renk-bg: #e6f4ec; }
+.skor-kat-hepato  { --skor-renk: #c9923c; --skor-renk-bg: #fff5e0; }
+.skor-kat-infek   { --skor-renk: #6b4f9a; --skor-renk-bg: #f0ecf7; }
+
+/* Sonuç kutusu seviye arka plan */
+.seviye-bg-kritik { background: #fff0ee; border: 1px solid #f3c2b8; }
+.seviye-bg-izlem  { background: #fff8ee; border: 1px solid #f0d8a3; }
+.seviye-bg-stabil { background: var(--lab-normal-bg); border: 1px solid #c3dab1; }
+
+/* Top tabs — 6 sekmeye uyum (dar mobilde) */
+.top-tab { padding: 12px 6px; font-size: 13px; }
+
+/* --- Dashboard kartı --- */
+.dashboard-skor-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px;
+  margin-bottom: 12px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 120ms, box-shadow 120ms;
+}
+.dashboard-skor-card:active { transform: scale(0.99); }
+.dashboard-skor-icon {
+  width: 44px; height: 44px;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 22px;
+  flex-shrink: 0;
+}
+.dashboard-skor-body { flex: 1; min-width: 0; }
+.dashboard-skor-baslik {
+  font-size: 15px; font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 3px;
+}
+.dashboard-skor-aciklama {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.dashboard-skor-ok {
+  color: var(--text-secondary);
+  font-size: 22px;
+  flex-shrink: 0;
+}
+
+/* --- Hasta detay: Skorlar paneli --- */
+.skor-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.skor-panel-aciklama {
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex: 1;
+  min-width: 0;
+}
+
+.skor-katalog {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.skor-katalog-kart {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--skor-renk, var(--accent));
+  border-radius: 10px;
+  padding: 10px 12px;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 120ms, box-shadow 120ms;
+  -webkit-tap-highlight-color: transparent;
+}
+.skor-katalog-kart:active { transform: scale(0.98); }
+.skor-katalog-ad {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 3px;
+}
+.skor-katalog-aciklama {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.35;
+}
+
+/* Geçmiş skor kayıt kartı */
+.skor-kayit-kart {
+  background: #fff;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--skor-renk, var(--accent));
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.skor-kayit-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.skor-kayit-meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+.skor-kayit-tarih {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.skor-kayit-ad {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.skor-kayit-body {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.45;
+}
+.skor-kayit-etiket {
+  font-weight: 600;
+  margin-bottom: 3px;
+}
+.skor-kayit-mesaj {
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+.skor-kayit-kilavuz {
+  margin-top: 4px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* --- Skor hesaplama modalı --- */
+.modal-box-skor {
+  max-width: 520px;
+  width: 92%;
+  max-height: 88vh;
+  display: flex;
+  flex-direction: column;
+}
+.modal-box-skor .modal-footer { margin-top: 0; }
+
+.skor-modal-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 0 4px 12px;
+}
+.skor-kategori-pill {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: var(--skor-renk-bg, var(--bg-secondary));
+  color: var(--skor-renk, var(--accent));
+}
+.skor-modal-aciklama {
+  font-size: 12px;
+  color: var(--text-secondary);
+  flex: 1;
+  min-width: 0;
+}
+
+.skor-modal-form {
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 4px 4px 8px;
+}
+
+.skor-input-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.skor-input-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary);
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+}
+.skor-input-birim {
+  font-size: 11px;
+  color: var(--text-secondary);
+  font-weight: 400;
+}
+.skor-input-num, .skor-input-select { min-height: 40px; }
+
+.skor-bool-grp {
+  display: flex;
+  gap: 8px;
+}
+.skor-bool-btn {
+  flex: 1;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  background: #fff;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  min-height: 40px;
+  transition: background 120ms, color 120ms, border-color 120ms;
+  -webkit-tap-highlight-color: transparent;
+}
+.skor-bool-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.skor-bool-btn[data-v="0"].active {
+  background: var(--text-secondary);
+  border-color: var(--text-secondary);
+}
+
+/* Skor sonuç kutusu */
+.skor-sonuc {
+  margin-top: 10px;
+  flex-shrink: 0;
+}
+.skor-sonuc-bos {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px;
+  border: 1px dashed var(--border);
+  border-radius: 10px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  text-align: center;
+}
+.skor-sonuc-eksik {
+  font-size: 11px;
+  color: var(--warning);
+}
+.skor-sonuc-kutu {
+  padding: 14px;
+  border-radius: 10px;
+}
+.skor-puan-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.skor-puan-buyuk {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1;
+}
+.skor-puan-max {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+.skor-puan-birim {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-left: 6px;
+}
+.skor-yorum {
+  font-size: 13px;
+  color: var(--text-primary);
+  line-height: 1.5;
+  margin-bottom: 6px;
+}
+.skor-detay {
+  font-size: 11px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  font-style: italic;
+}
+.skor-bilesenler-toggle {
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+.skor-bilesenler-toggle summary {
+  cursor: pointer;
+  padding: 4px 0;
+}
+.skor-bilesenler-tablo {
+  width: 100%;
+  margin-top: 6px;
+  font-size: 12px;
+  border-collapse: collapse;
+}
+.skor-bilesenler-tablo td {
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border);
+}
+.skor-bilesenler-tablo td:first-child { color: var(--text-secondary); }
+.skor-bilesen-puan {
+  text-align: right;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.skor-modal-kaynak {
+  padding: 8px 4px 4px;
+  font-size: 12px;
+}
+.skor-modal-kaynak a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+/* --- Skor seçim modalı --- */
+.modal-box-secim {
+  max-width: 520px;
+  width: 92%;
+  max-height: 86vh;
+  display: flex;
+  flex-direction: column;
+}
+.skor-secim-hasta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: var(--bg-secondary);
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  flex-wrap: wrap;
+}
+.skor-secim-not {
+  font-size: 11px;
+  color: var(--text-secondary);
+}
+.skor-secim-liste {
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  padding-right: 2px;
+}
+.skor-secim-grup { margin-bottom: 12px; }
+.skor-secim-grup-baslik {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--text-secondary);
+  margin-bottom: 6px;
+  padding-left: 2px;
+}
+.skor-secim-kart {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--skor-renk, var(--accent));
+  border-radius: 10px;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  cursor: pointer;
+  font-family: inherit;
+  transition: transform 120ms, background 120ms;
+  -webkit-tap-highlight-color: transparent;
+}
+.skor-secim-kart:active { transform: scale(0.98); background: var(--bg-secondary); }
+.skor-secim-ad {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+.skor-secim-aciklama {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-bottom: 2px;
+}
+.skor-secim-kilavuz {
+  font-size: 11px;
+  color: var(--skor-renk, var(--accent));
+  font-style: italic;
+}
+

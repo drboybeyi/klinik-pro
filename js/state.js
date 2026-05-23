@@ -6,6 +6,7 @@ const _state = {
   alerjiler:     {},
   notlar:        {},
   tetkikler:     {},
+  skorlar:       {},
   aiSorgulari:   {},
   ayarlar:       {},
   activeHastaId: null

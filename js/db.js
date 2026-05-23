@@ -17,7 +17,7 @@ function userRef(path) { return ref(db, `users/${_uid}/${path}`); }
 // --- Listeners ---
 
 export function startListeners() {
-  ['hastalar', 'tanilar', 'ilaclar', 'alerjiler', 'notlar', 'tetkikler', 'aiSorgulari', 'ayarlar']
+  ['hastalar', 'tanilar', 'ilaclar', 'alerjiler', 'notlar', 'tetkikler', 'skorlar', 'aiSorgulari', 'ayarlar']
     .forEach(_listen);
 }
 
@@ -45,7 +45,7 @@ export async function updateHasta(id, data) {
 }
 
 export async function deleteHastaWithRelated(hastaId) {
-  const cols = ['tanilar', 'ilaclar', 'alerjiler', 'notlar', 'tetkikler'];
+  const cols = ['tanilar', 'ilaclar', 'alerjiler', 'notlar', 'tetkikler', 'skorlar'];
   const deletes = [remove(userRef(`hastalar/${hastaId}`))];
   for (const col of cols) {
     const snap = await get(userRef(col));
@@ -195,6 +195,22 @@ export async function deleteTetkikDosya(path) {
     // Dosya yoksa sessizce geç; diğer hatalarda fırlat
     if (e.code !== 'storage/object-not-found') throw e;
   }
+}
+
+// --- Skor CRUD ---
+
+export async function saveSkor(data) {
+  if (data.id) {
+    await update(userRef(`skorlar/${data.id}`), data);
+    return data.id;
+  }
+  const r = push(userRef('skorlar'));
+  await set(r, { ...data, id: r.key, olusturmaTarih: new Date().toISOString() });
+  return r.key;
+}
+
+export async function deleteSkor(id) {
+  await remove(userRef(`skorlar/${id}`));
 }
 
 // --- AI Sorgu CRUD ---

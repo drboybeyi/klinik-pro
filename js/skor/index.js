@@ -1,11 +1,13 @@
-// Skor registry — 5 modern klinik skor (v0.4-α)
+// Skor registry — klinik skor modülleri
 import cha2ds2va  from './cha2ds2va.js';
 import hasbled    from './hasbled.js';
 import ckdEpi2021 from './ckdEpi2021.js';
 import meld3      from './meld3.js';
 import curb65     from './curb65.js';
+import wellsPE    from './wellsPE.js';
+import wellsDVT   from './wellsDVT.js';
 
-export const SKORLAR = [cha2ds2va, hasbled, ckdEpi2021, meld3, curb65];
+export const SKORLAR = [cha2ds2va, hasbled, ckdEpi2021, meld3, curb65, wellsPE, wellsDVT];
 
 const SKOR_MAP = new Map(SKORLAR.map(s => [s.id, s]));
 
@@ -17,5 +19,6 @@ export const KATEGORI_LABEL = {
   kardiyo: '❤️ Kardiyoloji',
   renal:   '🫘 Nefroloji',
   hepato:  '🫁 Hepatoloji',
-  infek:   '🦠 Enfeksiyon'
+  infek:   '🦠 Enfeksiyon',
+  vte:     '🩸 Vasküler / VTE'
 };

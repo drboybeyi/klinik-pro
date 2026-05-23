@@ -1,6 +1,7 @@
 import { getState } from '../state.js';
 import { bugun, formatTarih } from '../utils.js';
 import { openSkorSecimModal } from '../components/skorSecimModal.js';
+import { SKORLAR } from '../skor/index.js';
 
 export class DashboardView {
   render() {
@@ -48,7 +49,7 @@ export class DashboardView {
           <div class="dashboard-skor-icon">🧮</div>
           <div class="dashboard-skor-body">
             <div class="dashboard-skor-baslik">Klinik Skor Hesaplayıcı</div>
-            <div class="dashboard-skor-aciklama">CHA₂DS₂-VA · HAS-BLED · CKD-EPI 2021 · MELD 3.0 · CURB-65</div>
+            <div class="dashboard-skor-aciklama">${SKORLAR.length} skor · kardiyo, renal, hepato, enfeksiyon, VTE</div>
           </div>
           <div class="dashboard-skor-ok">→</div>
         </div>

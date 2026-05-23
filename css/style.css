@@ -2423,6 +2423,79 @@ body {
 }
 .skor-input-num, .skor-input-select { min-height: 40px; }
 
+/* Lab Parser (v0.4.1) */
+.lab-parser-row {
+  background: #fef9f0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+.lab-parser-btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 8px 14px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 38px;
+  transition: background 120ms;
+}
+.lab-parser-btn:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.lab-parser-btn:disabled {
+  background: #b8a384;
+  cursor: not-allowed;
+}
+.lab-parser-btn small {
+  opacity: 0.85;
+  font-size: 11px;
+  font-weight: 400;
+}
+.lab-parser-btn-done {
+  background: var(--success) !important;
+}
+.lab-parser-status {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.lab-parser-status-error {
+  color: var(--danger);
+}
+.lab-parser-status-warn {
+  color: var(--warning);
+}
+
+.lab-kaynak {
+  font-size: 11px;
+  color: var(--lab-normal);
+  margin-top: 3px;
+  font-style: italic;
+}
+.lab-kaynak-manuel {
+  color: var(--text-secondary);
+}
+
+.lab-input-uyari {
+  border-color: var(--danger) !important;
+  background: #fff8f7;
+}
+.lab-uyari-mesaj {
+  font-size: 11px;
+  color: var(--danger);
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
 .skor-autofill-rozet {
   font-size: 11px;
   color: var(--lab-normal);

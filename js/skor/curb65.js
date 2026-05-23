@@ -9,9 +9,24 @@ export default {
   aciklama: 'Toplum kaynaklı pnömoni şiddet ve yönetim',
   link: 'https://thorax.bmj.com/content/58/5/377',
 
+  // Lab parser BUN ve üre ayrı alanlar olarak ister; applyLabParse hangisi
+  // dönerse ona göre ureBirim'i de ayarlar.
+  labParseEk: ['BUN'],
+
+  applyLabParse(parsed) {
+    // BUN tercih edilir (Türk lablarında yaygın); yoksa üre (mmol/L)
+    if (parsed?.BUN?.deger != null && !Number.isNaN(+parsed.BUN.deger)) {
+      return { ure: +parsed.BUN.deger, ureBirim: 'mgdl' };
+    }
+    if (parsed?.ure?.deger != null && !Number.isNaN(+parsed.ure.deger)) {
+      return { ure: +parsed.ure.deger, ureBirim: 'mmol' };
+    }
+    return {};
+  },
+
   inputs: [
     { key: 'konfuzyon', tip: 'bool', label: 'Konfüzyon (yeni başlangıçlı dezoryantasyon)' },
-    { key: 'ure',       tip: 'ondalik', label: 'Üre / BUN', birim: 'mmol/L (BUN için >19 mg/dL)', min: 0, max: 100, adim: 0.1 },
+    { key: 'ure',       tip: 'ondalik', label: 'Üre / BUN', birim: 'mmol/L (BUN için >19 mg/dL)', min: 0, max: 100, adim: 0.1, labParseAlan: 'ure' },
     { key: 'ureBirim',  tip: 'enum', label: 'Birim',
       secenekler: [
         { v: 'mmol', label: 'mmol/L' },

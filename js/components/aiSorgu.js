@@ -5,32 +5,38 @@ import { confirm } from './modal.js';
 import { formatTarih } from '../utils.js';
 import { copyMarkdown, copyPlainText } from '../utils/aiKopyala.js';
 import { exportPdf } from '../utils/aiPdf.js';
-import { gatherTetkikDosyalari, gatherTetkikDosyaMetadata } from '../utils/aiDosya.js';
+import {
+  gatherTetkikDosyalari,
+  gatherTetkikDosyaMetadata,
+  gatherTetkikDosyaListMeta,
+  getDefaultSecilenIds
+} from '../utils/aiDosya.js';
 
 const WEB_SEARCH_USD = 0.01; // arama başına
 
-const WORKER_URL = 'https://muddy-cherry-1712.drahmetboyoglu.workers.dev';
+const WORKER_URL        = 'https://muddy-cherry-1712.drahmetboyoglu.workers.dev';
+const WORKER_STREAM_URL = 'https://muddy-cherry-1712.drahmetboyoglu.workers.dev/stream';
 
 const MODELS = {
   sonnet: {
     id:    'claude-sonnet-4-5-20250929',
     label: 'Sonnet 4.5 — dengeli ($0.03/sorgu)',
     kisa:  'Sonnet 4.5',
-    inUsd: 3  / 1_000_000,
+    inUsd:  3  / 1_000_000,
     outUsd: 15 / 1_000_000
   },
   opus: {
     id:    'claude-opus-4-7',
     label: 'Opus 4.7 — en iyi ($0.14/sorgu)',
     kisa:  'Opus 4.7',
-    inUsd: 5  / 1_000_000,
+    inUsd:  5  / 1_000_000,
     outUsd: 25 / 1_000_000
   },
   haiku: {
     id:    'claude-haiku-4-5',
     label: 'Haiku 4.5 — hızlı ($0.01/sorgu)',
     kisa:  'Haiku 4.5',
-    inUsd: 1 / 1_000_000,
+    inUsd:  1 / 1_000_000,
     outUsd: 5 / 1_000_000
   }
 };
@@ -111,11 +117,20 @@ Yatak başı kısa karar destek: Bu hastada şu an ne yapmalıyım? Acil müdaha
 İlgili güncel kılavuzdan (ESC/AHA/ADA/KDIGO/GOLD) yanıt ver. Kanıt seviyesi ve sınıf belirt. Türk popülasyonu için TİTCK onayını da kontrol et.`
 };
 
-// Modül-içi geçici durum (aktif yanıt). Kaydedilince temizlenir.
-let _aktifYanit       = null;
-let _sonSablon        = 'serbest';
-let _yukleniyor       = false;
-let _webSearchEnabled = false;
+// --- Modül-içi state ---
+let _aktifYanit          = null;
+let _sonSablon           = 'serbest';
+let _webSearchEnabled    = false;
+
+// Streaming
+let _streaming           = false;
+let _aktifAbortController = null;
+let _renderPending       = false;
+
+// Hibrit tetkik seçimi
+let _tetkikDahil         = true;   // ana checkbox
+let _tetkikDetayAcik     = false;  // alt liste açık mı
+let _secilenTetkikIdleri = null;   // null = auto (son 5); array = manuel seçim
 
 // --- Veri toplama ---
 
@@ -185,113 +200,148 @@ function _fillTemplate(key, hastaId) {
   return tpl.replace(/\{(\w+)\}/g, (_, k) => data[k] ?? `{${k}}`);
 }
 
-// --- API ---
+// --- Token / maliyet tahmini (form altı önizleme için) ---
 
-async function askAI({ modelKey, soru, webSearch, tetkikler }) {
-  console.log('[askAI] Başladı', { modelKey, tetkikSayisi: tetkikler?.length, webSearch });
+function _tahminTokenDosya(meta /* { pdfCount, imageCount } */) {
+  // Kabaca: PDF ~750 token/sayfa, ortalama 2 sayfa varsayımı → 1500
+  //         Image ~800 token
+  return meta.pdfCount * 1500 + meta.imageCount * 800;
+}
 
-  const model = MODELS[modelKey];
+function _tahminMaliyetInput(tokens, modelKey) {
+  const m = MODELS[modelKey];
+  if (!m) return 0;
+  return tokens * m.inUsd;
+}
+
+// --- Streaming API ---
+
+async function askAIStream({
+  modelKey, soru, webSearch, tetkikler, secilenTetkikIdleri,
+  signal, onChunk, onComplete, onError
+}) {
+  const model   = MODELS[modelKey];
   const isHaiku = modelKey === 'haiku';
 
-  // Son 5 tetkiğin desteklenen dosyalarını base64'le hazırla
-  const tumDosyalar = await gatherTetkikDosyalari(tetkikler || [], 5);
-  console.log('[askAI] Dosyalar hazırlandı:', {
-    count: tumDosyalar.length,
-    types: tumDosyalar.map(d => `${d.kind}:${d.ad}`),
-    boyutlar: tumDosyalar.map(d => `${d.ad}: ${d.data?.length || 0} chars`)
-  });
-
-  // Haiku PDF desteklemez — sadece image bırak
-  const eklenecekDosyalar = isHaiku ? tumDosyalar.filter(d => d.kind === 'image') : tumDosyalar;
+  // 1) Dosyaları topla (seçilenler veya auto son 5)
+  const tumDosyalar = await gatherTetkikDosyalari(tetkikler || [], secilenTetkikIdleri);
+  const filteredDosyalar = isHaiku ? tumDosyalar.filter(d => d.kind === 'image') : tumDosyalar;
   const haikuAtlanan = isHaiku ? tumDosyalar.filter(d => d.kind === 'document').length : 0;
-  console.log('[askAI] Haiku filtre sonrası:', { eklenecek: eklenecekDosyalar.length, haikuAtlanan });
 
-  // Content array: önce belgeler/görüntüler, sonra metin
-  const contentBlocks = eklenecekDosyalar.map(d => ({
-    type: d.kind, // 'document' veya 'image'
-    source: {
-      type:       'base64',
-      media_type: d.mediaType,
-      data:       d.data
-    }
+  // 2) Content blocks
+  const contentBlocks = filteredDosyalar.map(d => ({
+    type: d.kind,
+    source: { type: 'base64', media_type: d.mediaType, data: d.data }
   }));
   contentBlocks.push({ type: 'text', text: soru });
 
-  console.log('[askAI] Content array hazır:', {
-    blokSayisi: contentBlocks.length,
-    types: contentBlocks.map(b => b.type)
-  });
-
+  // 3) Body
   const body = {
     model:      model.id,
-    max_tokens: webSearch ? 4096 : 2048,
+    max_tokens: webSearch ? 4096 : 4096,
     system:     webSearch ? (SYSTEM_PROMPT_BASE + WEB_SEARCH_SYSTEM_EK) : SYSTEM_PROMPT_BASE,
     messages:   [{ role: 'user', content: contentBlocks }]
   };
   if (webSearch) {
-    body.tools = [{
-      type:     'web_search_20250305',
-      name:     'web_search',
-      max_uses: 5
-    }];
+    body.tools = [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }];
   }
 
-  const bodyStr = JSON.stringify(body);
-  console.log('[askAI] Body boyutu:', bodyStr.length, 'bytes — Worker\'a gönderiliyor');
-
-  const r = await fetch(WORKER_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: bodyStr
-  });
-  if (!r.ok) {
-    const t = await r.text().catch(() => '');
-    throw new Error(`API ${r.status}: ${t.slice(0, 200)}`);
+  // 4) Streaming fetch
+  let response;
+  try {
+    response = await fetch(WORKER_STREAM_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal
+    });
+  } catch (error) {
+    if (error.name === 'AbortError') {
+      onComplete?.({ text: '', aborted: true, usage: { input_tokens: 0, output_tokens: 0 },
+        webSearchCount: 0, model: model.id, pdfCount: 0, imageCount: 0, haikuAtlanan });
+      return;
+    }
+    onError?.(error);
+    return;
   }
-  const data = await r.json();
 
-  // Yanıttaki tüm text bloklarını birleştir (web search ile birden fazla text bloğu olabilir)
-  const content = Array.isArray(data?.content) ? data.content : [];
-  const text = content
-    .filter(b => b?.type === 'text' && typeof b.text === 'string')
-    .map(b => b.text)
-    .join('\n\n')
-    .trim();
+  if (!response.ok) {
+    const t = await response.text().catch(() => '');
+    onError?.(new Error(`API ${response.status}: ${t.slice(0, 200)}`));
+    return;
+  }
 
-  if (!text) throw new Error('API yanıtı boş ya da beklenmedik formatta');
-
-  // Web search sayısı: usage.server_tool_use.web_search_requests veya content içindeki server_tool_use blokları
+  // 5) SSE parse
+  const reader  = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let fullText = '';
+  let usage = { input_tokens: 0, output_tokens: 0 };
   let webSearchCount = 0;
-  if (data?.usage?.server_tool_use?.web_search_requests != null) {
-    webSearchCount = data.usage.server_tool_use.web_search_requests;
-  } else {
-    webSearchCount = content.filter(b =>
-      (b?.type === 'server_tool_use' || b?.type === 'web_search_tool_use') &&
-      (!b.name || b.name === 'web_search')
-    ).length;
-  }
+  let modelName = model.id;
 
-  const pdfCount   = eklenecekDosyalar.filter(d => d.kind === 'document').length;
-  const imageCount = eklenecekDosyalar.filter(d => d.kind === 'image').length;
+  const pdfCount   = filteredDosyalar.filter(d => d.kind === 'document').length;
+  const imageCount = filteredDosyalar.filter(d => d.kind === 'image').length;
 
-  console.log('[askAI] Response geldi:', {
-    inputTokens:  data.usage?.input_tokens,
-    outputTokens: data.usage?.output_tokens,
-    pdfCount,
-    imageCount,
-    webSearchCount
+  const _finish = (aborted) => onComplete?.({
+    text: fullText, aborted, usage, webSearchCount,
+    model: modelName, pdfCount, imageCount, haikuAtlanan
   });
 
-  return {
-    text,
-    inputTokens:    data.usage?.input_tokens  || 0,
-    outputTokens:   data.usage?.output_tokens || 0,
-    webSearchCount,
-    pdfCount,
-    imageCount,
-    haikuAtlanan,
-    apiModel:       data.model || model.id
-  };
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split('\n\n');
+      buffer = events.pop() || '';
+
+      for (const event of events) {
+        if (!event.trim()) continue;
+        const lines = event.split('\n');
+        const dataLine = lines.find(l => l.startsWith('data: '));
+        if (!dataLine) continue;
+        let data;
+        try { data = JSON.parse(dataLine.substring(6)); }
+        catch { continue; }
+
+        // Text delta
+        if (data.type === 'content_block_delta' && data.delta?.type === 'text_delta') {
+          const chunk = data.delta.text;
+          fullText += chunk;
+          onChunk?.(chunk, fullText);
+        }
+        // Web search tool kullanımı
+        if (data.type === 'content_block_start' &&
+            data.content_block?.type === 'server_tool_use' &&
+            data.content_block?.name === 'web_search') {
+          webSearchCount++;
+        }
+        // Message start (usage başlangıcı)
+        if (data.type === 'message_start' && data.message) {
+          usage.input_tokens = data.message.usage?.input_tokens || 0;
+          modelName = data.message.model || model.id;
+        }
+        // Message delta (output token final)
+        if (data.type === 'message_delta' && data.usage) {
+          usage.output_tokens = data.usage.output_tokens || 0;
+          // server_tool_use.web_search_requests gelirse onu güvenilir kabul et
+          if (data.usage.server_tool_use?.web_search_requests != null) {
+            webSearchCount = data.usage.server_tool_use.web_search_requests;
+          }
+        }
+      }
+    }
+  } catch (error) {
+    if (error.name === 'AbortError' || signal?.aborted) {
+      _finish(true);
+      return;
+    }
+    onError?.(error);
+    return;
+  }
+
+  _finish(signal?.aborted === true);
 }
 
 function _maliyet(modelKey, inT, outT, webSearchCount = 0) {
@@ -300,60 +350,120 @@ function _maliyet(modelKey, inT, outT, webSearchCount = 0) {
   return inT * m.inUsd + outT * m.outUsd + (webSearchCount || 0) * WEB_SEARCH_USD;
 }
 
-function _formatDosyaMeta(pdf, img) {
-  const parts = [];
-  if (pdf > 0) parts.push(`📄 ${pdf} PDF`);
-  if (img > 0) parts.push(`🖼 ${img} img`);
-  return parts.join(' + ');
+function _formatToken(n) {
+  return (n || 0).toLocaleString('tr-TR');
 }
 
-// Form altındaki dosya önizleme satırını günceller (fetch yok, sadece sayım)
-function _updateDosyaInfo(hastaId) {
-  const el = document.querySelector('[data-dosya-info]');
-  if (!el) return;
+function _formatMaliyet(usd) {
+  return usd < 0.01 ? '<$0.01' : `~$${usd.toFixed(2)}`;
+}
 
+// Tetkik özet satırı (hibrit seçim altı)
+function _renderTetkikOzet(hastaId) {
   const sel       = document.getElementById('aiModelSelect');
   const modelKey  = sel?.value || 'sonnet';
   const isHaiku   = modelKey === 'haiku';
   const tetkikler = _items('tetkikler', hastaId);
-  const meta      = gatherTetkikDosyaMetadata(tetkikler, 5);
+
+  if (!_tetkikDahil) {
+    return `<span class="ai-dosya-info-bos">📎 Tetkik eklenmeyecek</span>`;
+  }
+
+  const ids  = _secilenTetkikIdleri; // null = auto
+  const meta = gatherTetkikDosyaMetadata(tetkikler, ids);
 
   if (meta.pdfCount === 0 && meta.imageCount === 0) {
-    el.innerHTML = `<span class="ai-dosya-info-bos">📎 Eklenecek tetkik dosyası yok</span>`;
-    return;
+    return `<span class="ai-dosya-info-bos">📎 Eklenecek tetkik dosyası yok</span>`;
   }
 
+  // Haiku PDF filtresi
+  const dahilPdf = isHaiku ? 0 : meta.pdfCount;
   const parts = [];
-  if (meta.pdfCount > 0)   parts.push(`${meta.pdfCount} PDF`);
-  if (meta.imageCount > 0) parts.push(`${meta.imageCount} görüntü`);
-  let html = `<span class="ai-dosya-info-ok">📎 ${parts.join(' + ')} eklenecek</span>`;
+  if (dahilPdf > 0)        parts.push(`📄 ${dahilPdf} PDF`);
+  if (meta.imageCount > 0) parts.push(`🖼 ${meta.imageCount} görüntü`);
+
+  const tahminiToken = _tahminTokenDosya({ pdfCount: dahilPdf, imageCount: meta.imageCount });
+  const tahminiUsd   = _tahminMaliyetInput(tahminiToken, modelKey);
+  const usdTxt = tahminiUsd < 0.001 ? '<$0.001' : `~$${tahminiUsd.toFixed(3)}`;
+
+  let html = `<span class="ai-dosya-info-ok">📎 ${parts.join(' + ')} eklenecek · ${usdTxt} ek</span>`;
 
   if (isHaiku && meta.pdfCount > 0) {
-    html += ` <span class="ai-dosya-info-warn">(Haiku PDF desteklemez — ${meta.pdfCount} PDF atlanacak)</span>`;
+    html += `<div class="tetkik-ozet-uyari">⚠️ Haiku 4.5 PDF desteklemiyor. ${meta.pdfCount} PDF atlanacak, sadece görüntüler gönderilecek.</div>`;
   }
+  return html;
+}
 
-  // Kaba token tahmini: PDF ~1500/sayfa-yokken-ortalama, image ~800
-  const dahilPdf = isHaiku ? 0 : meta.pdfCount;
-  const tahminiToken = dahilPdf * 1500 + meta.imageCount * 800;
-  const m = MODELS[modelKey];
-  const tahminiUsd = m ? tahminiToken * m.inUsd : 0;
-  if (tahminiToken > 0) {
-    const txt = tahminiUsd < 0.01 ? '<$0.01' : `~$${tahminiUsd.toFixed(3)}`;
-    html += ` <span class="ai-dosya-info-cost">(${txt} ek)</span>`;
-  }
+// Hibrit tetkik seçim bloğunu (detaylı liste) render et
+function _renderTetkikSecimBlock(hastaId) {
+  const tetkikler = _items('tetkikler', hastaId);
+  const listMeta  = gatherTetkikDosyaListMeta(tetkikler);
+  const toplam    = listMeta.length;
+  const dosyaliSayisi = listMeta.filter(m => m.pdfCount + m.imageCount > 0).length;
 
-  el.innerHTML = html;
+  // ana checkbox label dosya sayısını yansıtsın
+  const anaLabelEk = toplam > 0
+    ? (_secilenTetkikIdleri == null
+        ? `<small>(son 5 tetkik)</small>`
+        : `<small>(${_secilenTetkikIdleri.length} tetkik seçili)</small>`)
+    : `<small>(tetkik yok)</small>`;
+
+  // Liste satırları (sadece dosyalı tetkikler; dosyasız olanlar listeye girmez)
+  const dahilIdSet = new Set(
+    _secilenTetkikIdleri != null
+      ? _secilenTetkikIdleri
+      : listMeta.filter(m => m.autoSelected).map(m => m.id)
+  );
+
+  const liste = listMeta.filter(m => m.pdfCount + m.imageCount > 0).map(m => {
+    const tarihStr = m.tarih ? formatTarih(m.tarih) : '';
+    const tur = TETKIK_TUR_LBL[m.tur] || 'Diğer';
+    const fileBits = [];
+    if (m.pdfCount > 0)   fileBits.push(`${m.pdfCount} PDF`);
+    if (m.imageCount > 0) fileBits.push(`${m.imageCount} img`);
+    const fileTxt = fileBits.join(' + ');
+    const dahil = dahilIdSet.has(m.id);
+    return `
+      <label class="tetkik-item">
+        <input type="checkbox" data-tetkik-id="${m.id}" ${dahil ? 'checked' : ''} ${_tetkikDahil ? '' : 'disabled'}>
+        <span class="tetkik-item-label">
+          <span class="tetkik-item-tarih">${tarihStr}</span>
+          <span class="tetkik-item-baslik">${_esc(m.baslik || tur)}</span>
+          <span class="tetkik-item-dosya">${fileTxt}</span>
+        </span>
+      </label>
+    `;
+  }).join('') || `<div class="tetkik-item-bos">Dosyalı tetkik yok</div>`;
+
+  return `
+    <div class="ai-tetkik-secim">
+      <label class="checkbox-row">
+        <input type="checkbox" data-tetkik-dahil ${_tetkikDahil ? 'checked' : ''}>
+        <span>📎 Tetkikleri AI'a ekle ${anaLabelEk}</span>
+      </label>
+
+      ${dosyaliSayisi > 0 ? `
+        <button type="button" class="link-btn" data-tetkik-detay-toggle ${_tetkikDahil ? '' : 'disabled'}>
+          ${_tetkikDetayAcik ? 'Detayı gizle' : `Detaylı seç (${dosyaliSayisi} tetkik)`}
+        </button>
+        <div class="tetkik-listesi" data-tetkik-listesi ${_tetkikDetayAcik ? '' : 'hidden'}>
+          ${liste}
+        </div>
+      ` : ''}
+
+      <div class="tetkik-ozet" data-tetkik-ozet>${_renderTetkikOzet(hastaId)}</div>
+    </div>
+  `;
 }
 
 // --- Markdown render ---
 
 function _renderMd(text) {
   if (window.marked?.parse) {
-    try { return window.marked.parse(text, { breaks: true }); }
+    try { return window.marked.parse(text || '', { breaks: true }); }
     catch { /* fallthrough */ }
   }
-  // Basit fallback: satır sonları + html escape
-  const esc = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const esc = (text || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return `<pre style="white-space:pre-wrap;font-family:inherit;margin:0">${esc}</pre>`;
 }
 
@@ -389,6 +499,8 @@ export function renderAiPanel(hastaId) {
           </span>
         </label>
 
+        <div id="aiTetkikSecimSlot">${_renderTetkikSecimBlock(hastaId)}</div>
+
         <div class="ai-sablon-grid">${sablonBtns}</div>
 
         <div class="form-group" style="margin-bottom:12px">
@@ -397,8 +509,6 @@ export function renderAiPanel(hastaId) {
                     placeholder="Sorunuzu yazın veya yukarıdaki şablonlardan birini tıklayın…"
                     style="resize:vertical;min-height:180px;font-family:inherit;line-height:1.5"></textarea>
         </div>
-
-        <div class="ai-dosya-info" data-dosya-info></div>
 
         <button class="btn btn-primary ai-sor-btn" id="aiSorBtn" type="button">
           <span id="aiSorBtnLabel">Konsültasyon İste</span>
@@ -418,42 +528,80 @@ export function renderAiPanel(hastaId) {
 }
 
 function _renderAktifYanit() {
-  if (_yukleniyor) {
-    return `
-      <div class="card ai-yanit-card ai-yanit-loading">
-        <div class="ai-spinner"></div>
-        <div class="ai-yanit-loading-text">Düşünüyor…</div>
-      </div>
-    `;
-  }
   if (!_aktifYanit) return '';
-  const m = MODELS[_aktifYanit.modelKey];
+  const m   = MODELS[_aktifYanit.modelKey];
   const ws  = _aktifYanit.webSearchCount || 0;
   const pdf = _aktifYanit.pdfCount       || 0;
   const img = _aktifYanit.imageCount     || 0;
-  const maliyet = _maliyet(_aktifYanit.modelKey, _aktifYanit.inputTokens, _aktifYanit.outputTokens, ws);
-  const maliyetTxt = maliyet < 0.01 ? '<$0.01' : `~$${maliyet.toFixed(2)}`;
-  const dosyaTxt = _formatDosyaMeta(pdf, img);
+  const inT = _aktifYanit.inputTokens    || 0;
+  const outT = _aktifYanit.outputTokens  || 0;
+  const aborted = !!_aktifYanit.aborted;
+  const streaming = !!_aktifYanit.streaming;
+
+  // Metadata parçaları
+  const dosyaParts = [];
+  if (pdf > 0) dosyaParts.push(`📄 ${pdf} PDF`);
+  if (img > 0) dosyaParts.push(`🖼 ${img} görüntü`);
+  const dosyaTxt = dosyaParts.join(' + ');
+
+  const maliyet    = _maliyet(_aktifYanit.modelKey, inT, outT, ws);
+  const maliyetTxt = _formatMaliyet(maliyet);
+
+  // Önceki yanıt bölümü (Yeniden Sor)
+  const oncekiHtml = (_aktifYanit.oncekiYanit) ? `
+    <div class="ai-yanit-onceki-bolum">
+      <div class="ai-yanit-onceki-baslik">Önceki yanıt · ${_aktifYanit.oncekiTarih || ''}</div>
+      <div class="ai-yanit-body markdown-body">${_renderMd(_aktifYanit.oncekiYanit)}</div>
+    </div>
+  ` : '';
+
+  if (streaming) {
+    // Stream başlığı + boş/akan body. Action butonları yok, metadata yok.
+    const yeniBaslik = _aktifYanit.oncekiYanit
+      ? `<div class="ai-yanit-yeni-baslik">Yeni yanıt · şimdi</div>` : '';
+    return `
+      <div class="card ai-yanit-card ai-yanit-streaming">
+        ${yeniBaslik}
+        <div class="ai-yanit-streaming-bar">
+          <span class="ai-streaming-dot"></span>
+          <span>Yazılıyor… <strong>${m?.kisa || ''}</strong></span>
+        </div>
+        <div class="ai-yanit-body markdown-body" id="aiYanitBody">${_renderMd(_aktifYanit.yanit || '')}</div>
+        ${oncekiHtml}
+      </div>
+    `;
+  }
+
+  // Stream bitti — tam metadata + action
+  const yeniBaslik = _aktifYanit.oncekiYanit
+    ? `<div class="ai-yanit-yeni-baslik">Yeni yanıt · ${_aktifYanit.yeniTarih || ''}</div>` : '';
+
+  const abortedNote = aborted
+    ? `<div class="ai-yanit-aborted-note">⚠️ Yarıda kesildi</div>` : '';
+
   return `
     <div class="card ai-yanit-card">
+      ${yeniBaslik}
+      ${abortedNote}
       <div class="ai-yanit-meta">
         <div class="ai-yanit-meta-info">
-          <strong>${m.kisa}</strong>
-          <span class="ai-yanit-meta-sep">•</span>
-          <span>${_aktifYanit.inputTokens.toLocaleString()} in + ${_aktifYanit.outputTokens.toLocaleString()} out</span>
+          <strong>${m?.kisa || ''}</strong>
           ${dosyaTxt ? `<span class="ai-yanit-meta-sep">•</span><span>${dosyaTxt}</span>` : ''}
-          ${ws ? `<span class="ai-yanit-meta-sep">•</span><span>${ws} web search</span>` : ''}
+          <span class="ai-yanit-meta-sep">•</span>
+          <span>${_formatToken(inT)} in + ${_formatToken(outT)} out</span>
+          ${ws ? `<span class="ai-yanit-meta-sep">•</span><span>🌐 ${ws} web search</span>` : ''}
           <span class="ai-yanit-meta-sep">•</span>
           <span>${maliyetTxt}</span>
         </div>
         <div class="ai-yanit-actions">
-          <button class="btn-mini" id="aiKopyalaMd"    title="Markdown kopyala">📋 MD</button>
+          <button class="btn-mini" id="aiKopyalaMd"   title="Markdown kopyala">📋 MD</button>
           <button class="btn-mini" id="aiKopyalaTxt"  title="Düz metin kopyala">📝 Metin</button>
           <button class="btn-mini" id="aiPdf"         title="PDF indir">📄 PDF</button>
           <button class="btn-mini btn-mini-primary" id="aiKaydet" title="Kaydet">💾 Kaydet</button>
         </div>
       </div>
       <div class="ai-yanit-body markdown-body">${_renderMd(_aktifYanit.yanit)}</div>
+      ${oncekiHtml}
     </div>
   `;
 }
@@ -515,14 +663,17 @@ export function attachAiListeners(hastaId) {
     wsBox.addEventListener('change', e => { _webSearchEnabled = e.target.checked; });
   }
 
-  // Model değişince dosya bilgi satırını yenile (Haiku uyarısı + maliyet tahmini değişir)
-  document.getElementById('aiModelSelect')?.addEventListener('change', () => _updateDosyaInfo(hastaId));
+  // Model değişince tetkik özetini ve seçim bloğunu yenile
+  document.getElementById('aiModelSelect')?.addEventListener('change', () => _refreshTetkikSecim(hastaId));
 
-  // İlk açılışta dosya bilgi satırını bas
-  _updateDosyaInfo(hastaId);
+  // Konsültasyon İste / Durdur
+  document.getElementById('aiSorBtn')?.addEventListener('click', () => {
+    if (_streaming) _stopStream();
+    else            _gonderStream(hastaId);
+  });
 
-  // Konsültasyon İste
-  document.getElementById('aiSorBtn')?.addEventListener('click', () => _gonder(hastaId));
+  // Hibrit tetkik seçimi
+  _attachTetkikSecimListeners(hastaId);
 
   // Aktif yanıt aksiyon butonları
   _attachAktifYanitListeners(hastaId);
@@ -530,10 +681,71 @@ export function attachAiListeners(hastaId) {
   // Geçmiş kartları + sil
   _attachGecmisListeners(hastaId);
 
-  // Textarea değişirse şablon → serbest sayılsın (textarea boşa düşerse de)
+  // Textarea değişirse şablon → serbest sayılsın
   document.getElementById('aiSoru')?.addEventListener('input', e => {
     if (!e.target.value.trim()) _sonSablon = 'serbest';
   });
+}
+
+function _attachTetkikSecimListeners(hastaId) {
+  // Ana checkbox
+  const ana = document.querySelector('[data-tetkik-dahil]');
+  ana?.addEventListener('change', e => {
+    _tetkikDahil = e.target.checked;
+    if (!_tetkikDahil) _tetkikDetayAcik = false;
+    _refreshTetkikSecim(hastaId);
+  });
+
+  // Detaylı seç toggle
+  document.querySelector('[data-tetkik-detay-toggle]')?.addEventListener('click', () => {
+    if (!_tetkikDahil) return;
+    _tetkikDetayAcik = !_tetkikDetayAcik;
+    _refreshTetkikSecim(hastaId);
+  });
+
+  // Alt checkbox'lar
+  document.querySelectorAll('[data-tetkik-id]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      // Mevcut seçimi snapshot et: ya manuel seçim ya da auto'dan başla
+      const tetkikler = _items('tetkikler', hastaId);
+      if (_secilenTetkikIdleri == null) {
+        _secilenTetkikIdleri = getDefaultSecilenIds(tetkikler);
+      }
+      const id = cb.dataset.tetkikId;
+      const idx = _secilenTetkikIdleri.indexOf(id);
+      if (cb.checked && idx < 0)       _secilenTetkikIdleri.push(id);
+      else if (!cb.checked && idx >= 0) _secilenTetkikIdleri.splice(idx, 1);
+      // Sadece özet satırını ve ana label'ı güncellemek yeterli — liste DOM'u stabil kalır
+      _refreshTetkikOzetSatiri(hastaId);
+      _refreshAnaLabel(hastaId);
+    });
+  });
+}
+
+function _refreshTetkikSecim(hastaId) {
+  const slot = document.getElementById('aiTetkikSecimSlot');
+  if (!slot) return;
+  slot.innerHTML = _renderTetkikSecimBlock(hastaId);
+  _attachTetkikSecimListeners(hastaId);
+}
+
+function _refreshTetkikOzetSatiri(hastaId) {
+  const el = document.querySelector('[data-tetkik-ozet]');
+  if (el) el.innerHTML = _renderTetkikOzet(hastaId);
+}
+
+function _refreshAnaLabel(hastaId) {
+  const tetkikler = _items('tetkikler', hastaId);
+  const listMeta  = gatherTetkikDosyaListMeta(tetkikler);
+  const dosyaliSayisi = listMeta.filter(m => m.pdfCount + m.imageCount > 0).length;
+  const span = document.querySelector('[data-tetkik-dahil]')?.parentElement?.querySelector('small');
+  if (span) {
+    if (listMeta.length === 0) span.textContent = '(tetkik yok)';
+    else if (_secilenTetkikIdleri == null) span.textContent = '(son 5 tetkik)';
+    else span.textContent = `(${_secilenTetkikIdleri.length} tetkik seçili)`;
+  }
+  const toggle = document.querySelector('[data-tetkik-detay-toggle]');
+  if (toggle && !_tetkikDetayAcik) toggle.textContent = `Detaylı seç (${dosyaliSayisi} tetkik)`;
 }
 
 function _attachAktifYanitListeners(hastaId) {
@@ -546,7 +758,7 @@ function _attachAktifYanitListeners(hastaId) {
 function _attachGecmisListeners(hastaId) {
   document.querySelectorAll('.ai-gecmis-kart').forEach(k => {
     k.addEventListener('click', e => {
-      if (e.target.closest('[data-ai-del]')) return; // sil tıklaması — açma
+      if (e.target.closest('[data-ai-del]')) return;
       const id   = k.dataset.aiId;
       const kayit = (getState('aiSorgulari') || {})[id];
       if (kayit) _openGecmisModal(kayit, hastaId);
@@ -568,53 +780,144 @@ function _attachGecmisListeners(hastaId) {
   });
 }
 
-async function _gonder(hastaId) {
+// --- Stream gönder / durdur ---
+
+function _setButton(streaming) {
+  const btn    = document.getElementById('aiSorBtn');
+  const lbl    = document.getElementById('aiSorBtnLabel');
+  if (!btn) return;
+  if (streaming) {
+    btn.classList.add('is-streaming');
+    if (lbl) lbl.textContent = '⏹ Durdur';
+  } else {
+    btn.classList.remove('is-streaming');
+    if (lbl) lbl.textContent = 'Konsültasyon İste';
+  }
+}
+
+function _scheduleStreamRender() {
+  if (_renderPending) return;
+  _renderPending = true;
+  requestAnimationFrame(() => {
+    _renderPending = false;
+    const body = document.getElementById('aiYanitBody');
+    if (body && _aktifYanit) body.innerHTML = _renderMd(_aktifYanit.yanit || '');
+  });
+}
+
+async function _gonderStream(hastaId, overrides = null) {
+  // overrides: { soru, modelKey, sablonAdi, oncekiYanit, oncekiTarih, oncekiKayitId, secilenTetkikIdleri }
   const ta       = document.getElementById('aiSoru');
   const sel      = document.getElementById('aiModelSelect');
-  const btn      = document.getElementById('aiSorBtn');
-  const btnLbl   = document.getElementById('aiSorBtnLabel');
-  const soru     = (ta?.value || '').trim();
-  const modelKey = sel?.value || 'sonnet';
+  const soru     = overrides?.soru ?? (ta?.value || '').trim();
+  const modelKey = overrides?.modelKey ?? (sel?.value || 'sonnet');
+  const sablonAdi = overrides?.sablonAdi ?? _sonSablon ?? 'serbest';
 
   if (!soru) {
     showToast('Soru boş olamaz', 'error');
     return;
   }
 
-  _yukleniyor = true;
-  _aktifYanit = null;
-  if (btn)    btn.disabled = true;
-  if (btnLbl) btnLbl.textContent = 'Düşünüyor…';
+  // Yeniden Sor için: textarea + model UI'ı senkronla
+  if (overrides) {
+    if (ta && ta.value !== soru) ta.value = soru;
+    if (sel && overrides.modelKey && sel.value !== overrides.modelKey) sel.value = overrides.modelKey;
+  }
+
+  // Seçilen tetkikler: override > UI state
+  let secilenTetkikIdleri;
+  if (overrides && 'secilenTetkikIdleri' in overrides) {
+    secilenTetkikIdleri = overrides.secilenTetkikIdleri;
+  } else {
+    secilenTetkikIdleri = _tetkikDahil ? _secilenTetkikIdleri : [];
+  }
+
+  _streaming = true;
+  _aktifAbortController = new AbortController();
+  _aktifYanit = {
+    hastaId,
+    modelKey,
+    sablonAdi,
+    soru,
+    yanit:          '',
+    streaming:      true,
+    aborted:        false,
+    inputTokens:    0,
+    outputTokens:   0,
+    webSearchCount: 0,
+    pdfCount:       0,
+    imageCount:     0,
+    apiModel:       MODELS[modelKey]?.id || '',
+    secilenTetkikIdleri: secilenTetkikIdleri == null ? null : [...secilenTetkikIdleri],
+    haikuAtlanan:   0,
+    // Yeniden Sor için
+    oncekiYanit:    overrides?.oncekiYanit || null,
+    oncekiTarih:    overrides?.oncekiTarih || null,
+    oncekiKayitId:  overrides?.oncekiKayitId || null
+  };
+  _setButton(true);
   _refreshYanitSlot(hastaId);
 
+  const tetkikler = _items('tetkikler', hastaId);
+
   try {
-    const tetkikler = _items('tetkikler', hastaId);
-    const sonuc = await askAI({ modelKey, soru, webSearch: _webSearchEnabled, tetkikler });
-    _aktifYanit = {
-      hastaId,
+    await askAIStream({
       modelKey,
-      sablonAdi:      _sonSablon || 'serbest',
       soru,
-      yanit:          sonuc.text,
-      inputTokens:    sonuc.inputTokens,
-      outputTokens:   sonuc.outputTokens,
-      webSearchCount: sonuc.webSearchCount,
-      pdfCount:       sonuc.pdfCount,
-      imageCount:     sonuc.imageCount,
-      haikuAtlanan:   sonuc.haikuAtlanan,
-      apiModel:       sonuc.apiModel
-    };
-    if (sonuc.haikuAtlanan > 0) {
-      showToast(`${sonuc.haikuAtlanan} PDF Haiku tarafından desteklenmiyor — atlandı`, 'warning');
-    }
+      webSearch: _webSearchEnabled,
+      tetkikler,
+      secilenTetkikIdleri,
+      signal: _aktifAbortController.signal,
+      onChunk: (_chunk, full) => {
+        if (!_aktifYanit) return;
+        _aktifYanit.yanit = full;
+        _scheduleStreamRender();
+      },
+      onComplete: ({ text, aborted, usage, webSearchCount, model, pdfCount, imageCount, haikuAtlanan }) => {
+        if (!_aktifYanit) return;
+        _aktifYanit.yanit          = text || _aktifYanit.yanit || '';
+        _aktifYanit.streaming      = false;
+        _aktifYanit.aborted        = !!aborted;
+        _aktifYanit.inputTokens    = usage?.input_tokens || 0;
+        _aktifYanit.outputTokens   = usage?.output_tokens || 0;
+        _aktifYanit.webSearchCount = webSearchCount || 0;
+        _aktifYanit.pdfCount       = pdfCount || 0;
+        _aktifYanit.imageCount     = imageCount || 0;
+        _aktifYanit.haikuAtlanan   = haikuAtlanan || 0;
+        _aktifYanit.apiModel       = model || _aktifYanit.apiModel;
+        _aktifYanit.yeniTarih      = new Date().toLocaleString('tr-TR', {
+          day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+        });
+        if (_aktifYanit.haikuAtlanan > 0) {
+          showToast(`${_aktifYanit.haikuAtlanan} PDF Haiku tarafından desteklenmiyor — atlandı`, 'warning');
+        }
+        _streaming = false;
+        _aktifAbortController = null;
+        _setButton(false);
+        _refreshYanitSlot(hastaId);
+      },
+      onError: (err) => {
+        showToast(`Hata: ${err.message || err}`, 'error');
+        _aktifYanit = null;
+        _streaming = false;
+        _aktifAbortController = null;
+        _setButton(false);
+        _refreshYanitSlot(hastaId);
+      }
+    });
   } catch (e) {
-    showToast(`Hata: ${e.message}`, 'error');
+    showToast(`Hata: ${e.message || e}`, 'error');
     _aktifYanit = null;
-  } finally {
-    _yukleniyor = false;
-    if (btn)    btn.disabled = false;
-    if (btnLbl) btnLbl.textContent = 'Konsültasyon İste';
+    _streaming = false;
+    _aktifAbortController = null;
+    _setButton(false);
     _refreshYanitSlot(hastaId);
+  }
+}
+
+function _stopStream() {
+  if (_aktifAbortController) {
+    try { _aktifAbortController.abort(); } catch {}
   }
 }
 
@@ -666,9 +969,12 @@ async function _pdfAktif(hastaId) {
         inputTokens:    _aktifYanit.inputTokens,
         outputTokens:   _aktifYanit.outputTokens,
         webSearchCount: ws,
+        pdfCount:       _aktifYanit.pdfCount   || 0,
+        imageCount:     _aktifYanit.imageCount || 0,
         tahminiMaliyet: Number(maliyet.toFixed(6)),
         olusturmaTarih: new Date().toISOString(),
-        apiModel:       _aktifYanit.apiModel
+        apiModel:       _aktifYanit.apiModel,
+        aborted:        !!_aktifYanit.aborted
       },
       hastaAd:  ad,
       hastaMrn: mrn
@@ -687,17 +993,20 @@ async function _kaydet(hastaId) {
     const maliyet = _maliyet(_aktifYanit.modelKey, _aktifYanit.inputTokens, _aktifYanit.outputTokens, ws);
     await saveAiSorgu({
       hastaId,
-      model:           _aktifYanit.modelKey,
-      apiModel:        _aktifYanit.apiModel,
-      sablonAdi:       _aktifYanit.sablonAdi,
-      soru:            _aktifYanit.soru,
-      yanit:           _aktifYanit.yanit,
-      inputTokens:     _aktifYanit.inputTokens,
-      outputTokens:    _aktifYanit.outputTokens,
-      webSearchCount:  ws,
-      pdfCount:        _aktifYanit.pdfCount   || 0,
-      imageCount:      _aktifYanit.imageCount || 0,
-      tahminiMaliyet:  Number(maliyet.toFixed(6))
+      model:               _aktifYanit.modelKey,
+      apiModel:            _aktifYanit.apiModel,
+      sablonAdi:           _aktifYanit.sablonAdi,
+      soru:                _aktifYanit.soru,
+      yanit:               _aktifYanit.yanit,
+      inputTokens:         _aktifYanit.inputTokens,
+      outputTokens:        _aktifYanit.outputTokens,
+      webSearchCount:      ws,
+      pdfCount:            _aktifYanit.pdfCount   || 0,
+      imageCount:          _aktifYanit.imageCount || 0,
+      tahminiMaliyet:      Number(maliyet.toFixed(6)),
+      aborted:             !!_aktifYanit.aborted,
+      streaming:           true,
+      secilenTetkikIdleri: _aktifYanit.secilenTetkikIdleri || null
     });
     showToast('Konsültasyon kaydedildi', 'success');
     _aktifYanit = null;
@@ -719,10 +1028,14 @@ function _openGecmisModal(kayit, hastaId) {
   const ws   = kayit.webSearchCount || 0;
   const pdf  = kayit.pdfCount       || 0;
   const img  = kayit.imageCount     || 0;
-  const dosyaTxt = _formatDosyaMeta(pdf, img);
+  const dosyaParts = [];
+  if (pdf > 0) dosyaParts.push(`📄 ${pdf} PDF`);
+  if (img > 0) dosyaParts.push(`🖼 ${img} görüntü`);
+  const dosyaTxt = dosyaParts.join(' + ');
   const maliyet = (kayit.tahminiMaliyet != null)
-    ? (kayit.tahminiMaliyet < 0.01 ? '<$0.01' : `~$${kayit.tahminiMaliyet.toFixed(2)}`)
-    : '';
+    ? _formatMaliyet(kayit.tahminiMaliyet) : '';
+  const abortedNote = kayit.aborted
+    ? `<div class="ai-yanit-aborted-note">⚠️ Yarıda kesildi</div>` : '';
 
   const soru = kayit.soru || '';
   const soruLines = soru.split('\n');
@@ -741,12 +1054,14 @@ function _openGecmisModal(kayit, hastaId) {
         <span><strong>${m.kisa}</strong></span>
         <span class="ai-yanit-meta-sep">•</span>
         <span>${tarihStr}</span>
-        <span class="ai-yanit-meta-sep">•</span>
-        <span>${inT.toLocaleString()} in + ${outT.toLocaleString()} out</span>
         ${dosyaTxt ? `<span class="ai-yanit-meta-sep">•</span><span>${dosyaTxt}</span>` : ''}
-        ${ws ? `<span class="ai-yanit-meta-sep">•</span><span>${ws} web search</span>` : ''}
+        <span class="ai-yanit-meta-sep">•</span>
+        <span>${_formatToken(inT)} in + ${_formatToken(outT)} out</span>
+        ${ws ? `<span class="ai-yanit-meta-sep">•</span><span>🌐 ${ws} web search</span>` : ''}
         ${maliyet ? `<span class="ai-yanit-meta-sep">•</span><span>${maliyet}</span>` : ''}
       </div>
+
+      ${abortedNote}
 
       <div class="ai-gecmis-bolum">
         <div class="ai-gecmis-bolum-baslik">Soru</div>
@@ -760,6 +1075,7 @@ function _openGecmisModal(kayit, hastaId) {
       </div>
 
       <div class="ai-gecmis-modal-actions">
+        <button class="btn-mini btn-mini-primary" id="agmYenidenSor" type="button">🔄 Yeniden Sor</button>
         <button class="btn-mini" id="agmKopyalaMd"  type="button">📋 MD</button>
         <button class="btn-mini" id="agmKopyalaTxt" type="button">📝 Metin</button>
         <button class="btn-mini" id="agmPdf"        type="button">📄 PDF</button>
@@ -774,7 +1090,6 @@ function _openGecmisModal(kayit, hastaId) {
   ov.addEventListener('click', e => { if (e.target === ov) close(); });
   document.getElementById('agmClose').addEventListener('click', close);
 
-  // Soru genişlet
   document.getElementById('agmSoruToggle')?.addEventListener('click', () => {
     const el  = document.getElementById('agmSoru');
     const btn = document.getElementById('agmSoruToggle');
@@ -783,7 +1098,6 @@ function _openGecmisModal(kayit, hastaId) {
     btn.textContent = exp ? 'Daha az göster' : 'Tamamını gör';
   });
 
-  // Kopyala
   document.getElementById('agmKopyalaMd').addEventListener('click', async () => {
     try { await copyMarkdown(kayit.yanit || ''); showToast('Markdown kopyalandı', 'success'); }
     catch { showToast('Kopyalanamadı', 'error'); }
@@ -793,18 +1107,48 @@ function _openGecmisModal(kayit, hastaId) {
     catch { showToast('Kopyalanamadı', 'error'); }
   });
 
-  // PDF
   document.getElementById('agmPdf').addEventListener('click', async () => {
     const hid = hastaId || kayit.hastaId;
     const { ad, mrn } = _hastaInfo(hid);
-    try {
-      await exportPdf({ kayit, hastaAd: ad, hastaMrn: mrn });
-    } catch (e) {
-      showToast(`PDF oluşturulamadı: ${e.message}`, 'error');
-    }
+    try { await exportPdf({ kayit, hastaAd: ad, hastaMrn: mrn }); }
+    catch (e) { showToast(`PDF oluşturulamadı: ${e.message}`, 'error'); }
   });
 
-  // Sil
+  // Yeniden Sor — modal kapanır, AI sekmesinde stream başlar
+  document.getElementById('agmYenidenSor').addEventListener('click', () => {
+    if (_streaming) {
+      showToast('Önce mevcut yanıtı bitirin veya durdurun', 'warning');
+      return;
+    }
+    close();
+    const tarihKisa = kayit.olusturmaTarih
+      ? new Date(kayit.olusturmaTarih).toLocaleString('tr-TR', {
+          day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+        }) : '';
+    // Hibrit UI state'ini orijinal seçime sürükle
+    if (kayit.secilenTetkikIdleri && Array.isArray(kayit.secilenTetkikIdleri)) {
+      _secilenTetkikIdleri = [...kayit.secilenTetkikIdleri];
+      _tetkikDahil = kayit.secilenTetkikIdleri.length > 0;
+    } else {
+      _secilenTetkikIdleri = null;
+      _tetkikDahil = true;
+    }
+    _refreshTetkikSecim(hastaId);
+
+    _gonderStream(hastaId, {
+      soru:        kayit.soru,
+      modelKey:    kayit.model,
+      sablonAdi:   kayit.sablonAdi,
+      secilenTetkikIdleri: kayit.secilenTetkikIdleri ?? null,
+      oncekiYanit: kayit.yanit,
+      oncekiTarih: tarihKisa,
+      oncekiKayitId: kayit.id
+    });
+
+    // Yanıt slot'una scroll
+    document.getElementById('aiYanitSlot')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+
   document.getElementById('agmSil').addEventListener('click', async () => {
     close();
     const ok = await confirm('Bu konsültasyonu silmek istediğinizden emin misiniz?');
@@ -818,15 +1162,20 @@ function _openGecmisModal(kayit, hastaId) {
   });
 }
 
-// Hasta detay overlay kapanırken aktif yanıtı temizle (state diğer hastaya sızmasın)
+// --- Reset / refresh hooks ---
+
 export function resetAi() {
-  _aktifYanit       = null;
-  _sonSablon        = 'serbest';
-  _yukleniyor       = false;
-  _webSearchEnabled = false;
+  if (_aktifAbortController) { try { _aktifAbortController.abort(); } catch {} }
+  _aktifYanit          = null;
+  _sonSablon           = 'serbest';
+  _webSearchEnabled    = false;
+  _streaming           = false;
+  _aktifAbortController = null;
+  _tetkikDahil         = true;
+  _tetkikDetayAcik     = false;
+  _secilenTetkikIdleri = null;
 }
 
-// Geçmiş listesi (RTDB) güncellendiğinde — textarea/aktif yanıt state'ini bozmadan
 export function refreshAiGecmis(hastaId) {
   const list = document.getElementById('aiGecmisList');
   if (!list) return;
@@ -834,7 +1183,6 @@ export function refreshAiGecmis(hastaId) {
   _attachGecmisListeners(hastaId);
 }
 
-// Tetkikler değişince — form altındaki dosya önizleme satırını yenile
 export function refreshAiDosyaInfo(hastaId) {
-  _updateDosyaInfo(hastaId);
+  _refreshTetkikSecim(hastaId);
 }

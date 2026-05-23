@@ -12,6 +12,8 @@ const MAX_IMAGE_MB = 5;
 const MAX_BYTES_PDF   = MAX_PDF_MB   * 1024 * 1024;
 const MAX_BYTES_IMAGE = MAX_IMAGE_MB * 1024 * 1024;
 
+const AUTO_LIMIT = 5; // Default'ta son N tetkik dahil
+
 /**
  * dosya.tip / dosya.ad'dan content blok tipini ve mediaType'ı çıkar.
  * Desteklenmiyorsa null döner.
@@ -38,13 +40,10 @@ export function getMediaType(dosya) {
  * Hata varsa null + console.warn.
  */
 async function _fetchDosyaBase64(dosya) {
-  console.log('[fetchAsBase64] Başladı:', dosya?.ad, 'url:', dosya?.url?.substring(0, 80));
-
   if (!dosya?.url) {
     console.error('[fetchAsBase64] url yok, atlanıyor:', dosya?.ad);
     return null;
   }
-
   try {
     const r = await fetch(STORAGE_PROXY_URL, {
       method:  'POST',
@@ -61,36 +60,62 @@ async function _fetchDosyaBase64(dosya) {
       console.error('[fetchAsBase64] Worker yanıtı base64 içermiyor:', data);
       return null;
     }
-    console.log('[fetchAsBase64] Worker başarılı:', {
-      ad: dosya.ad,
-      size: data.size,
-      mediaType: data.mediaType,
-      base64Length: data.base64.length
-    });
     return data.base64;
   } catch (e) {
-    console.error('[fetchAsBase64] Worker proxy HATA:', dosya?.ad, e?.message, e);
+    console.error('[fetchAsBase64] Worker proxy HATA:', dosya?.ad, e?.message);
     return null;
   }
 }
 
+// Tetkikleri tarihe göre (yeni → eski) sırala
+function _sortedByDate(tetkikler) {
+  return [...(tetkikler || [])].sort((a, b) => new Date(b.tarih) - new Date(a.tarih));
+}
+
+// Auto seçim: son AUTO_LIMIT tetkiğin id'leri
+function _autoIds(tetkikler) {
+  return _sortedByDate(tetkikler).slice(0, AUTO_LIMIT).map(t => t.id);
+}
+
+// Dahil edilecek tetkikleri çöz: secilenTetkikIdleri null/undefined ise auto (son N), array ise filtrele
+function _resolveDahilTetkikler(tetkikler, secilenTetkikIdleri) {
+  const sorted = _sortedByDate(tetkikler);
+  if (secilenTetkikIdleri == null) return sorted.slice(0, AUTO_LIMIT);
+  const idSet = new Set(secilenTetkikIdleri);
+  return sorted.filter(t => idSet.has(t.id));
+}
+
+/**
+ * Bir tetkikin dosyalarını sayar (geçerli, boyut limiti içinde).
+ */
+function _tetkikDosyaSayisi(tetkik) {
+  let pdf = 0, img = 0;
+  for (const d of (tetkik.dosyalar || [])) {
+    const mi = getMediaType(d);
+    if (!mi) continue;
+    const maxBytes = mi.kind === 'document' ? MAX_BYTES_PDF : MAX_BYTES_IMAGE;
+    if (d.boyut && d.boyut > maxBytes) continue;
+    if (mi.kind === 'document') pdf++;
+    else img++;
+  }
+  return { pdf, img };
+}
+
 /**
  * UI önizleme için — fetch YAPMADAN sadece tipleri ve sayıları döner.
- * (gerçek base64 indirme askAI çağrıldığında yapılır)
+ * secilenTetkikIdleri verilmezse son AUTO_LIMIT tetkik baz alınır.
  */
-export function gatherTetkikDosyaMetadata(tetkikler, maxTetkik = 5) {
+export function gatherTetkikDosyaMetadata(tetkikler, secilenTetkikIdleri) {
   if (!tetkikler?.length) return { pdfCount: 0, imageCount: 0, atlananBoyut: 0, atlananDesteklenmeyen: 0 };
 
-  const sorted = [...tetkikler]
-    .sort((a, b) => new Date(b.tarih) - new Date(a.tarih))
-    .slice(0, maxTetkik);
+  const dahil = _resolveDahilTetkikler(tetkikler, secilenTetkikIdleri);
 
   let pdfCount = 0;
   let imageCount = 0;
   let atlananBoyut = 0;
   let atlananDesteklenmeyen = 0;
 
-  for (const t of sorted) {
+  for (const t of dahil) {
     for (const d of (t.dosyalar || [])) {
       const mi = getMediaType(d);
       if (!mi) { atlananDesteklenmeyen++; continue; }
@@ -105,77 +130,78 @@ export function gatherTetkikDosyaMetadata(tetkikler, maxTetkik = 5) {
 }
 
 /**
- * AI çağrısı için — son N tetkiğin desteklenen dosyalarını base64'le indirir.
- * Boyut limiti aşan veya desteklenmeyen formatlar sessizce atlanır (console.warn).
- *
- * @returns [{ kind: 'document'|'image', mediaType, data: base64, ad, tetkikTarih, tetkikBaslik }, ...]
+ * UI hibrit seçim listesi için: tüm tetkikler için
+ *   { id, baslik, tarih, tur, pdfCount, imageCount, toplamBoyut, autoSelected }
+ * Liste tarihe göre yeni→eski sıralıdır. autoSelected = ilk AUTO_LIMIT içinde mi?
  */
-export async function gatherTetkikDosyalari(tetkikler, maxTetkik = 5) {
-  console.log('[gatherTetkikDosyalari] Başladı', { tetkikSayisi: tetkikler?.length, maxTetkik });
+export function gatherTetkikDosyaListMeta(tetkikler) {
+  const sorted = _sortedByDate(tetkikler);
+  const autoSet = new Set(_autoIds(tetkikler));
+  return sorted.map(t => {
+    const { pdf, img } = _tetkikDosyaSayisi(t);
+    const toplamBoyut = (t.dosyalar || []).reduce((acc, d) => acc + (d.boyut || 0), 0);
+    return {
+      id: t.id,
+      baslik: t.baslik || '',
+      tarih: t.tarih || '',
+      tur: t.tur || '',
+      pdfCount: pdf,
+      imageCount: img,
+      toplamBoyut,
+      autoSelected: autoSet.has(t.id)
+    };
+  });
+}
 
-  if (!tetkikler?.length) {
-    console.log('[gatherTetkikDosyalari] Tetkik yok, boş array dönüyor');
-    return [];
-  }
+/**
+ * Default auto seçim (null geçildiğinde gather'ın seçeceği ID'ler).
+ */
+export function getDefaultSecilenIds(tetkikler) {
+  return _autoIds(tetkikler);
+}
 
-  const sorted = [...tetkikler]
-    .sort((a, b) => new Date(b.tarih) - new Date(a.tarih))
-    .slice(0, maxTetkik);
+/**
+ * AI çağrısı için — verilen tetkiklerin desteklenen dosyalarını base64'le indirir.
+ * @param {Array} tetkikler — Hastanın tüm tetkikleri (sıralanmamış olabilir)
+ * @param {Array<string>|null} secilenTetkikIdleri — null ise auto (son AUTO_LIMIT), array ise yalnız o ID'ler
+ * @returns [{ kind, mediaType, data, ad, tetkikId, tetkikTarih, tetkikBaslik, boyut }, ...]
+ */
+export async function gatherTetkikDosyalari(tetkikler, secilenTetkikIdleri) {
+  if (!tetkikler?.length) return [];
 
-  console.log('[gatherTetkikDosyalari] Sıralı tetkikler:', sorted.map(t => ({
-    baslik:        t.baslik,
-    tarih:         t.tarih,
-    dosyaSayisi:   t.dosyalar?.length || 0,
-    dosyaPathleri: (t.dosyalar || []).map(d => d.path || d.url?.substring(0, 80))
-  })));
-
+  const dahil = _resolveDahilTetkikler(tetkikler, secilenTetkikIdleri);
   const out = [];
 
-  for (const t of sorted) {
-    if (!t.dosyalar?.length) {
-      console.log('[gatherTetkikDosyalari] Tetkikte dosya yok:', t.baslik);
-      continue;
-    }
+  for (const t of dahil) {
+    if (!t.dosyalar?.length) continue;
     for (const d of t.dosyalar) {
-      console.log('[gatherTetkikDosyalari] Dosya işleniyor:', d.ad, 'tip:', d.tip, 'boyut:', d.boyut);
-
       const mi = getMediaType(d);
-      console.log('[gatherTetkikDosyalari] MediaInfo:', mi);
       if (!mi) {
         console.warn('[gatherTetkikDosyalari] Desteklenmeyen format, atlanıyor:', d.ad);
         continue;
       }
-
       const maxBytes = mi.kind === 'document' ? MAX_BYTES_PDF : MAX_BYTES_IMAGE;
       if (d.boyut && d.boyut > maxBytes) {
         console.warn(`[gatherTetkikDosyalari] Boyut limiti aşıyor, atlanıyor: ${d.ad} (${(d.boyut/1024/1024).toFixed(1)} MB)`);
         continue;
       }
-
       try {
         const base64 = await _fetchDosyaBase64(d);
-        console.log('[gatherTetkikDosyalari] Base64 sonucu:', base64 ? `${base64.length} chars` : 'NULL');
-
-        if (!base64) {
-          console.warn('[gatherTetkikDosyalari] Base64 boş, atlanıyor:', d.ad);
-          continue;
-        }
-
+        if (!base64) continue;
         out.push({
           kind:         mi.kind,
           mediaType:    mi.mediaType,
           data:         base64,
           ad:           d.ad,
+          tetkikId:     t.id,
           tetkikTarih:  t.tarih,
-          tetkikBaslik: t.baslik
+          tetkikBaslik: t.baslik,
+          boyut:        d.boyut || 0
         });
-        console.log('[gatherTetkikDosyalari] Dosya eklendi:', d.ad);
       } catch (e) {
         console.error('[gatherTetkikDosyalari] HATA:', d.ad, e);
       }
     }
   }
-
-  console.log('[gatherTetkikDosyalari] Bitti, toplam:', out.length, 'dosya hazır');
   return out;
 }

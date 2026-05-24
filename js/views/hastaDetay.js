@@ -15,6 +15,7 @@ import { confirm }         from '../components/modal.js';
 import { showToast }       from '../components/toast.js';
 import { formatTarih }     from '../utils.js';
 import { renderAiPanel, attachAiListeners, resetAi, refreshAiGecmis, refreshAiDosyaInfo } from '../components/aiSorgu.js';
+import { renderLabDefteriIcerik, attachLabDefteriListeners, resetLabDefteriState } from '../labDefteri/labDefteriUI.js';
 
 const SEMPTOM_FIELDS = [
   { key: 'sikayetler', label: 'Başvuru Şikayetleri', icon: '📋' },
@@ -45,11 +46,14 @@ const TETKIK_TUR = {
 let _overlay  = null;
 let _hastaId  = null;
 let _aktifTab = 'ozet';
+let _aktifTetkikAltTab = 'dosyalar';
 let _unsubs   = [];
 
 export function openHastaDetay(hastaId) {
   _hastaId  = hastaId;
   _aktifTab = 'ozet';
+  _aktifTetkikAltTab = 'dosyalar';
+  resetLabDefteriState();
   _mount();
 }
 
@@ -70,6 +74,7 @@ function _mount() {
       _refreshHeader();
       _refreshOzetTab();
       _refreshMetinTab('hdPanelSemptomlar', SEMPTOM_FIELDS);
+      _refreshTetkikLab();
     }),
     subscribe('tanilar',   () => _refreshSection('hdTanilarList',  _renderTanilarList)),
     subscribe('ilaclar',   () => _refreshSection('hdIlaclarList',  _renderIlaclarList)),
@@ -90,6 +95,7 @@ function _unmount() {
   _overlay?.remove();
   _overlay = null;
   resetAi();
+  resetLabDefteriState();
 }
 
 function _close() {
@@ -253,15 +259,51 @@ function _renderNotlarPanel() {
 }
 
 function _renderTetkiklerPanel() {
+  const dosyaSayisi = _tetkikler().reduce((s, t) => s + (t.dosyalar?.length || 0), 0);
   return `
     <div class="view-container">
-      <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
-        <button class="btn btn-primary" id="hdTetkikEkle"
-                style="min-height:36px;padding:8px 16px;font-size:13px">+ Yeni Tetkik</button>
+      <div class="tetkik-tabs">
+        <button class="tetkik-tab ${_aktifTetkikAltTab==='dosyalar'?'active':''}" data-tetkik-alt-tab="dosyalar">
+          📎 Dosyalar${dosyaSayisi ? ` (${dosyaSayisi})` : ''}
+        </button>
+        <button class="tetkik-tab ${_aktifTetkikAltTab==='lab'?'active':''}" data-tetkik-alt-tab="lab">
+          📊 Lab Değerleri
+        </button>
       </div>
-      <div id="hdTetkiklerList">${_renderTetkiklerList()}</div>
+
+      <div id="hdTetkikDosyalar" style="display:${_aktifTetkikAltTab==='dosyalar'?'block':'none'}">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+          <button class="btn btn-primary" id="hdTetkikEkle"
+                  style="min-height:36px;padding:8px 16px;font-size:13px">+ Yeni Tetkik</button>
+        </div>
+        <div id="hdTetkiklerList">${_renderTetkiklerList()}</div>
+      </div>
+
+      <div id="hdTetkikLab" style="display:${_aktifTetkikAltTab==='lab'?'block':'none'}">
+        ${renderLabDefteriIcerik(_hasta())}
+      </div>
     </div>
   `;
+}
+
+function _switchTetkikAltTab(tab) {
+  _aktifTetkikAltTab = tab;
+  _overlay.querySelectorAll('[data-tetkik-alt-tab]').forEach(b =>
+    b.classList.toggle('active', b.dataset.tetkikAltTab === tab));
+  const dosyalar = document.getElementById('hdTetkikDosyalar');
+  const lab      = document.getElementById('hdTetkikLab');
+  if (dosyalar) dosyalar.style.display = tab === 'dosyalar' ? 'block' : 'none';
+  if (lab)      lab.style.display      = tab === 'lab'      ? 'block' : 'none';
+  if (tab === 'lab') attachLabDefteriListeners(_hasta(), _tetkikler(), _refreshTetkikLab);
+}
+
+function _refreshTetkikLab() {
+  const el = document.getElementById('hdTetkikLab');
+  if (!el) return;
+  // Tarama sürerken yalnızca canlı metni güncelleyen onChunk dokunur — full re-render
+  // panel state'ini koruduğu için güvenli.
+  el.innerHTML = renderLabDefteriIcerik(_hasta());
+  attachLabDefteriListeners(_hasta(), _tetkikler(), _refreshTetkikLab);
 }
 
 function _renderSkorlarPanel() {
@@ -674,6 +716,11 @@ function _attachNotlarListeners() {
 
 function _attachTetkiklerListeners() {
   document.getElementById('hdTetkikEkle')?.addEventListener('click', () => openTetkikForm(_hastaId, null));
+  _overlay.querySelectorAll('[data-tetkik-alt-tab]').forEach(b =>
+    b.addEventListener('click', () => _switchTetkikAltTab(b.dataset.tetkikAltTab)));
+  if (_aktifTetkikAltTab === 'lab') {
+    attachLabDefteriListeners(_hasta(), _tetkikler(), _refreshTetkikLab);
+  }
 }
 
 function _attachSkorlarListeners() {

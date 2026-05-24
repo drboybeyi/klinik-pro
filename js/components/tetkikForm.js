@@ -1,6 +1,9 @@
-import { saveTetkik, uploadTetkikDosya, deleteTetkikDosya } from '../db.js';
+import { saveTetkik, uploadTetkikDosya, deleteTetkikDosya, saveLabDefteri, mergeDefter } from '../db.js';
 import { showToast } from './toast.js';
 import { bugun } from '../utils.js';
+import { getState } from '../state.js';
+import { tekTetkikTara } from '../labDefteri/aiTarayici.js';
+import { getMediaType } from '../utils/aiDosya.js';
 
 const TUR_LISTE = [
   { v: 'kan',         label: '🩸 Kan' },
@@ -212,7 +215,7 @@ export function openTetkikForm(hastaId, tetkik = null, onSaved = null) {
       ];
 
       // 4) RTDB kaydet
-      await saveTetkik({
+      const kayitData = {
         ...(tetkik || {}),
         hastaId,
         tarih,
@@ -221,11 +224,17 @@ export function openTetkikForm(hastaId, tetkik = null, onSaved = null) {
         ozet,
         kritik,
         dosyalar: finalDosyalar
-      });
+      };
+      const savedId = await saveTetkik(kayitData);
 
       showToast(tetkik ? 'Tetkik güncellendi' : 'Tetkik eklendi', 'success');
       onSaved?.();
       _close();
+
+      // Yeni dosya yüklendiyse arka planda Lab Defteri'ne tara (fire-and-forget)
+      if (files.length > 0) {
+        _otomatikLabTara(hastaId, { ...kayitData, id: savedId || tetkik?.id });
+      }
     } catch (e) {
       console.error('Tetkik kaydı başarısız:', e);
       btn.disabled = false;
@@ -239,6 +248,35 @@ export function openTetkikForm(hastaId, tetkik = null, onSaved = null) {
 function _close() {
   _overlay?.classList.remove('open');
   setTimeout(() => { _overlay?.remove(); _overlay = null; }, 300);
+}
+
+/**
+ * Yeni yüklenen tetkiki arka planda tarayıp Lab Defteri'ne merge eder.
+ * Sessiz (fire-and-forget): hata olursa konsola yazar, kullanıcıyı bloklamaz.
+ */
+async function _otomatikLabTara(hastaId, tetkik) {
+  // PDF/görüntü içermiyorsa tarama yapma
+  const destekli = (tetkik.dosyalar || []).some(d => getMediaType(d));
+  if (!destekli) return;
+
+  const hasta = (getState('hastalar') || {})[hastaId];
+  if (!hasta) return;
+
+  showToast('🔬 Yeni tetkikten lab değerleri taranıyor…', 'info');
+  try {
+    const sonuc = await tekTetkikTara(hasta, tetkik);
+    if (!sonuc.ok) {
+      console.warn('[otomatikLabTara] tarama başarısız:', sonuc.kod, sonuc.mesaj);
+      return;
+    }
+    // Tarama sürerken defter değişmiş olabilir — güncel halini tekrar oku
+    const mevcut = (getState('hastalar') || {})[hastaId]?.labDefteri || { parametreler: {} };
+    const birlesik = mergeDefter(mevcut, sonuc.labDefteri);
+    await saveLabDefteri(hastaId, birlesik);
+    showToast(`✅ ${sonuc.meta.paramSayisi} lab değeri Lab Defteri'ne eklendi`, 'success');
+  } catch (e) {
+    console.warn('[otomatikLabTara] hata:', e);
+  }
 }
 
 function _showErr(msg) {

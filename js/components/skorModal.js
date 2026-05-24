@@ -6,13 +6,27 @@
 import { saveSkor } from '../db.js';
 import { getState } from '../state.js';
 import { showToast } from './toast.js';
-import { parseLabValues, labDegerKontrol } from '../skor/labParser.js';
+import { formatTarih, gunFarki, bugun } from '../utils.js';
 
 let _overlay = null;
 // Mevcut modal için: input key → eşleşmenin kaynağı (gösterim için)
 let _autofillKaynak = {};
-// Lab parser sonuçları: input key → { tarih, deger }
+// Lab defterinden doldurulan input'lar: key → { tarih }
 let _labKaynak = {};
+
+// Skor input'larındaki labParseAlan → Lab Defteri parametre key eşleşmesi
+// (eski parser alan adları korunuyor; defter key'leri farklı olabilir)
+const ALAN_DEFTER_KEY = {
+  kreatinin: 'kreatinin',
+  bilirubin: 'bilirubin_total',
+  inr:       'INR',
+  sodyum:    'sodyum',
+  albumin:   'albumin',
+  ure:       'ure',
+  BUN:       'BUN',
+  AST:       'AST',
+  ALT:       'ALT'
+};
 
 // Türkçe karakter-aware match.
 //   Kısa keyword (<4 char, örn. 'mi','ht','kah'): tam kelime boundary (önce VE sonra non-word)
@@ -131,7 +145,27 @@ export function openSkorModal(skor, hasta = null, mevcut = null) {
     baslangic[inp.key] = inp.tip === 'bool' ? null : '';
   }
 
-  _overlay.innerHTML = `
+  // Lab Defteri'nden anında doldur (AI yok) — yalnızca yeni hesaplamada,
+  // hâlâ boş olan lab alanlarına. Düzenlemede kullanıcının snapshot'ı korunur.
+  let labDoldurulan = 0;
+  if (hasta && !mevcut) {
+    const dp = _defterParsed(skor, hasta);
+    if (dp) {
+      const guncel = skor.applyLabParse ? skor.applyLabParse(dp, {}) : _defaultDefterApply(skor, dp);
+      for (const [key, deger] of Object.entries(guncel)) {
+        if (deger == null || deger === '') continue;
+        if (baslangic[key] !== '' && baslangic[key] != null) continue; // dolu alanı ezme
+        baslangic[key] = deger;
+        // Kaynak etiketi yalnızca gerçek lab-değeri input'larına (labParseAlan'lı);
+        // CURB-65 ureBirim gibi türetilmiş alanlar doldurulur ama etiketlenmez/sayılmaz.
+        const alan = skor.inputs.find(i => i.key === key)?.labParseAlan;
+        if (alan) {
+          _labKaynak[key] = { tarih: dp[alan]?.tarih || _enGuncelTarih(dp) };
+          labDoldurulan++;
+        }
+      }
+    }
+  }
     <div class="modal-box modal-box-skor">
       <div class="modal-header">
         <span class="modal-title">${skor.ad}</span>
@@ -143,7 +177,7 @@ export function openSkorModal(skor, hasta = null, mevcut = null) {
         <span class="skor-modal-aciklama">${skor.aciklama}</span>
       </div>
 
-      ${_renderLabParserSatiri(skor, hasta)}
+      ${_renderLabDefterUyari(skor, hasta, labDoldurulan)}
 
       <div class="skor-modal-form" id="smForm">
         ${skor.inputs.map(inp => _renderInput(inp, baslangic[inp.key])).join('')}
@@ -189,14 +223,11 @@ export function openSkorModal(skor, hasta = null, mevcut = null) {
       _kaydet(skor, hasta, mevcut));
   }
 
-  // Lab Çek butonu (varsa)
-  document.getElementById('smLabCek')?.addEventListener('click', () =>
-    _labCek(skor, hasta));
-
-  // Manuel input değişiminde kaynak etiketini gizle
+  // Defter'den dolan bir alan manuel değiştirilince kaynak etiketini "manuel" yap
   document.querySelectorAll('#smForm .skor-input-num, #smForm .skor-input-select').forEach(el => {
-    el.addEventListener('input', () => _labKaynakGizle(el.dataset.key));
-    el.addEventListener('change', () => _labKaynakGizle(el.dataset.key));
+    const mark = () => _kaynakManuel(el.dataset.key);
+    el.addEventListener('input', mark);
+    el.addEventListener('change', mark);
   });
 }
 
@@ -225,8 +256,7 @@ function _renderInput(inp, value) {
             <option value="${o.v}" ${o.v === value ? 'selected' : ''}>${o.label}</option>
           `).join('')}
         </select>
-        <div class="lab-kaynak" data-lab-kaynak="${inp.key}" hidden></div>
-        <div class="lab-uyari-mesaj" data-lab-uyari="${inp.key}" hidden></div>
+        ${_kaynakEtiketi(inp.key)}
       </div>
     `;
   }
@@ -246,13 +276,12 @@ function _renderInput(inp, value) {
              ${inp.max !== undefined ? `max="${inp.max}"` : ''}
              step="${step}"
              inputmode="decimal">
-      <div class="lab-kaynak" data-lab-kaynak="${inp.key}" hidden></div>
-      <div class="lab-uyari-mesaj" data-lab-uyari="${inp.key}" hidden></div>
+      ${_kaynakEtiketi(inp.key)}
     </div>
   `;
 }
 
-// --- Lab Parser entegrasyonu ---
+// --- Lab Defteri entegrasyonu (anında, AI yok) ---
 
 function _skorLabAlanlari(skor) {
   const set = new Set();
@@ -263,138 +292,81 @@ function _skorLabAlanlari(skor) {
   return [...set];
 }
 
-function _renderLabParserSatiri(skor, hasta) {
-  if (!hasta) return '';
+// Skorun ilgilendiği alanlar için defterdeki son ölçümleri eski parser şeklinde döndürür:
+//   { kreatinin: { deger, tarih }, BUN: { deger, tarih }, ... }
+// Böylece skor.applyLabParse (CURB-65 BUN/üre mantığı) değişmeden çalışır.
+function _defterParsed(skor, hasta) {
+  const defter = hasta?.labDefteri;
+  if (!defter?.parametreler) return null;
   const alanlar = _skorLabAlanlari(skor);
-  if (alanlar.length === 0) return '';
-  return `
-    <div class="lab-parser-row">
-      <button type="button" class="lab-parser-btn" id="smLabCek">
-        📎 Lab değerlerini PDF'ten çek
-        <small>(son 3 tetkik · ~$0.05)</small>
-      </button>
-      <div class="lab-parser-status" id="smLabStatus" hidden></div>
-    </div>
-  `;
+  if (!alanlar.length) return null;
+
+  const out = {};
+  let bulundu = false;
+  for (const alan of alanlar) {
+    const key = ALAN_DEFTER_KEY[alan] || alan;
+    const son = defter.parametreler[key]?.olcumler?.[0]; // yeni → eski sıralı
+    if (son && son.deger != null) {
+      out[alan] = { deger: son.deger, tarih: son.tarih || null };
+      bulundu = true;
+    }
+  }
+  return bulundu ? out : null;
 }
 
-async function _labCek(skor, hasta) {
-  const btn    = document.getElementById('smLabCek');
-  const status = document.getElementById('smLabStatus');
-  if (!btn) return;
-
-  const orijinalIcerik = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = `⏳ Tetkik PDF\'leri okunuyor…`;
-  if (status) { status.hidden = true; status.textContent = ''; }
-
-  const alanlar = _skorLabAlanlari(skor);
-  const sonuc = await parseLabValues(hasta, alanlar);
-
-  if (!sonuc.ok) {
-    btn.disabled = false;
-    btn.innerHTML = orijinalIcerik;
-    if (status) {
-      status.hidden = false;
-      status.className = 'lab-parser-status lab-parser-status-error';
-      status.textContent = `⚠️ ${sonuc.mesaj}`;
-    }
-    return;
-  }
-
-  // Sonuçları input'lara aktar
-  const guncellemeler = skor.applyLabParse
-    ? skor.applyLabParse(sonuc.data, _topla())
-    : _defaultApplyLabParse(skor, sonuc.data);
-
-  let doldurulan = 0;
-  for (const [key, deger] of Object.entries(guncellemeler)) {
-    if (deger == null || deger === '') continue;
-    // Input alanını bul
-    const el = document.querySelector(`#smForm [data-key="${key}"]`);
-    if (!el) continue;
-    el.value = deger;
-    doldurulan++;
-
-    // Kaynak etiketi (tarih varsa parsed[alan]'dan al)
-    const alan = skor.inputs.find(i => i.key === key)?.labParseAlan || key;
-    const parsed = sonuc.data[alan];
-    const tarih = parsed?.tarih || sonuc.sonTarih || '';
-    _labKaynakGoster(key, tarih);
-
-    // Sınır kontrolü
-    const k = labDegerKontrol(alan, deger);
-    if (k.uyari) {
-      el.classList.add('lab-input-uyari');
-      _labUyariGoster(key, k.uyari);
-    }
-  }
-
-  // Sonuç ekranını güncelle
-  _refreshSonuc(skor);
-
-  // Buton durumu
-  btn.disabled = false;
-  if (doldurulan === 0) {
-    btn.innerHTML = orijinalIcerik;
-    if (status) {
-      status.hidden = false;
-      status.className = 'lab-parser-status lab-parser-status-warn';
-      status.textContent = `⚠️ Dosyalardan hiçbir lab değeri çıkarılamadı`;
-    }
-  } else {
-    btn.innerHTML = `✅ ${doldurulan} lab değeri dolduruldu`;
-    btn.classList.add('lab-parser-btn-done');
-    setTimeout(() => {
-      btn.innerHTML = orijinalIcerik;
-      btn.classList.remove('lab-parser-btn-done');
-    }, 3000);
-  }
-}
-
-function _defaultApplyLabParse(skor, parsedData) {
+function _defaultDefterApply(skor, dp) {
   const out = {};
   for (const inp of skor.inputs) {
     if (!inp.labParseAlan) continue;
-    const v = parsedData?.[inp.labParseAlan];
-    if (v?.deger != null && !Number.isNaN(+v.deger)) {
-      out[inp.key] = +v.deger;
-    }
+    const v = dp[inp.labParseAlan];
+    if (v?.deger != null && !Number.isNaN(+v.deger)) out[inp.key] = +v.deger;
   }
   return out;
 }
 
-function _labKaynakGoster(key, tarih) {
-  const el = document.querySelector(`[data-lab-kaynak="${key}"]`);
-  if (!el) return;
-  el.hidden = false;
-  el.textContent = `📄 ${tarih ? tarih + ' ' : ''}tetkikinden`;
-  _labKaynak[key] = { tarih };
+function _enGuncelTarih(dp) {
+  const tarihler = Object.values(dp).map(v => v?.tarih).filter(Boolean);
+  if (!tarihler.length) return null;
+  return tarihler.sort((a, b) => new Date(b) - new Date(a))[0];
 }
 
-function _labKaynakGizle(key) {
-  if (!key) return;
-  const kaynak = document.querySelector(`[data-lab-kaynak="${key}"]`);
-  const uyari  = document.querySelector(`[data-lab-uyari="${key}"]`);
-  const input  = document.querySelector(`#smForm [data-key="${key}"]`);
-  if (kaynak && !kaynak.hidden) {
-    kaynak.textContent = '✏️ Manuel';
-    kaynak.classList.add('lab-kaynak-manuel');
-    // Manuel olduğu için uyarı da kaldır
+// Bir input'un defter kaynağı etiketi (tarih + eskilik uyarısı)
+function _kaynakEtiketi(key) {
+  const k = _labKaynak[key];
+  if (!k) return '';
+  if (!k.tarih) {
+    return `<div class="lab-defter-kaynak" data-defter-kaynak="${key}">📋 Lab defterinden</div>`;
   }
-  if (uyari) {
-    uyari.hidden = true;
-    uyari.textContent = '';
+  const fmt = formatTarih(k.tarih);
+  let fark; try { fark = gunFarki(bugun(), k.tarih); } catch { fark = null; }
+
+  let cls = 'lab-defter-kaynak', txt;
+  if (fark == null || fark < 0)      txt = `📋 ${fmt} defterinden`;
+  else if (fark <= 90)               txt = `📋 ${fmt} (${fark} gün önce)`;
+  else { cls += ' lab-defter-eski';  txt = `⚠️ ${fmt} (${fark} gün eski — güncelle)`; }
+
+  return `<div class="${cls}" data-defter-kaynak="${key}">${txt}</div>`;
+}
+
+function _renderLabDefterUyari(skor, hasta, doldurulan) {
+  if (!hasta || _skorLabAlanlari(skor).length === 0) return '';
+  if (doldurulan > 0) {
+    return `<div class="lab-defter-bar lab-defter-bar-ok">📋 ${doldurulan} değer Lab Defteri'nden dolduruldu — kontrol edip değiştirebilirsin</div>`;
   }
-  if (input) input.classList.remove('lab-input-uyari');
+  const defter = hasta?.labDefteri;
+  if (!defter?.parametreler || Object.keys(defter.parametreler).length === 0) {
+    return `<div class="lab-defter-bar lab-defter-bar-bos">📭 Lab Defteri boş — <strong>Tetkikler › Lab Değerleri</strong>'nden tarayın. Değerleri manuel de girebilirsiniz.</div>`;
+  }
+  return `<div class="lab-defter-bar lab-defter-bar-bos">📋 Lab Defteri'nde bu skor için uygun değer bulunamadı — manuel girin.</div>`;
+}
+
+// Manuel düzenlemede defter kaynağı etiketini "manuel" yap
+function _kaynakManuel(key) {
+  const el = document.querySelector(`[data-defter-kaynak="${key}"]`);
+  if (!el) return;
+  el.textContent = '✏️ Manuel';
+  el.className = 'lab-defter-kaynak lab-defter-manuel';
   delete _labKaynak[key];
-}
-
-function _labUyariGoster(key, mesaj) {
-  const el = document.querySelector(`[data-lab-uyari="${key}"]`);
-  if (!el) return;
-  el.hidden = false;
-  el.textContent = mesaj;
 }
 
 function _topla() {

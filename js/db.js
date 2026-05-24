@@ -213,6 +213,51 @@ export async function deleteSkor(id) {
   await remove(userRef(`skorlar/${id}`));
 }
 
+// --- Lab Defteri ---
+// labDefteri hasta kaydının bir alanı olarak saklanır: hastalar/{id}/labDefteri
+// (ayrı koleksiyon değil) — böylece mevcut `hastalar` listener'ı üzerinden
+// otomatik olarak hasta.labDefteri şeklinde her yere iner.
+
+export async function saveLabDefteri(hastaId, labDefteri) {
+  await update(userRef(`hastalar/${hastaId}`), {
+    labDefteri,
+    guncellemeTarih: new Date().toISOString()
+  });
+}
+
+/**
+ * İki lab defterini birleştirir (yeni tetkik tarandığında).
+ * Aynı parametrenin ölçümleri tarih bazlı dedup edilir; aynı tarih varsa
+ * YENİ ölçüm (yeni defterden gelen) tercih edilir.
+ * Saf fonksiyon — RTDB'ye dokunmaz.
+ */
+export function mergeDefter(eski, yeni) {
+  const eskiParams = eski?.parametreler || {};
+  const yeniParams = yeni?.parametreler || {};
+  const merged = { parametreler: { ...eskiParams } };
+
+  for (const [key, yeniParam] of Object.entries(yeniParams)) {
+    const mevcut = merged.parametreler[key];
+    if (!mevcut) {
+      merged.parametreler[key] = yeniParam;
+      continue;
+    }
+    // Aynı tarihli ölçümü yeniyle değiştir, gerisini koru
+    const yeniTarihler = new Set((yeniParam.olcumler || []).map(o => o.tarih));
+    const korunan = (mevcut.olcumler || []).filter(o => !yeniTarihler.has(o.tarih));
+    merged.parametreler[key] = {
+      ...mevcut,
+      ...yeniParam,
+      olcumler: [...(yeniParam.olcumler || []), ...korunan]
+        .sort((a, b) => new Date(b.tarih) - new Date(a.tarih))
+    };
+  }
+
+  merged.sonGuncelleme = new Date().toISOString();
+  merged.durum = 'tarandi';
+  return merged;
+}
+
 // --- AI Sorgu CRUD ---
 
 export async function saveAiSorgu(data) {

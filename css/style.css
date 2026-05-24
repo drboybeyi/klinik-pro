@@ -2856,3 +2856,96 @@ body {
   font-style: normal;
 }
 
+/* ========== Tetkikler alt-sekmeleri + Lab Defteri placeholder (v0.4.3 Sprint 1) ========== */
+.tetkik-altsekmeler {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 16px;
+  border-bottom: 2px solid #d4c4a8;
+}
+
+.alt-sekme {
+  background: none;
+  border: none;
+  padding: 10px 16px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #6b5640;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -2px;
+  transition: all 0.2s;
+  font-family: inherit;
+}
+
+.alt-sekme:hover {
+  color: #5a3f1f;
+  background: #fef9f0;
+}
+
+.alt-sekme.aktif {
+  color: #5a3f1f;
+  border-bottom-color: #8b6f47;
+  font-weight: 600;
+}
+
+.alt-sekme-icerik[hidden] {
+  display: none;
+}
+
+.lab-defteri-placeholder {
+  text-align: center;
+  padding: 60px 20px;
+  color: #6b5640;
+  background: #fef9f0;
+  border: 1px dashed #d4c4a8;
+  border-radius: 12px;
+}
+
+.placeholder-icon {
+  font-size: 64px;
+  margin-bottom: 20px;
+  opacity: 0.6;
+}
+
+.lab-defteri-placeholder h3 {
+  color: #5a3f1f;
+  margin-bottom: 12px;
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.lab-defteri-placeholder p {
+  font-size: 14px;
+  line-height: 1.6;
+  max-width: 480px;
+  margin: 0 auto 24px;
+}
+
+.placeholder-ozellikler {
+  display: inline-block;
+  text-align: left;
+  background: white;
+  padding: 16px 24px;
+  border-radius: 8px;
+  margin-top: 16px;
+  border: 1px solid #e8dcc0;
+}
+
+.placeholder-ozellikler h4 {
+  font-size: 13px;
+  color: #5a3f1f;
+  margin: 0 0 8px 0;
+}
+
+.placeholder-ozellikler ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.placeholder-ozellikler li {
+  padding: 4px 0;
+  font-size: 13px;
+  color: #6b5640;
+}
+

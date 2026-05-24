@@ -253,15 +253,60 @@ function _renderNotlarPanel() {
 }
 
 function _renderTetkiklerPanel() {
+  const dosyaSayisi = _tetkikler().reduce((s, t) => s + (t.dosyalar?.length || 0), 0);
   return `
     <div class="view-container">
-      <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
-        <button class="btn btn-primary" id="hdTetkikEkle"
-                style="min-height:36px;padding:8px 16px;font-size:13px">+ Yeni Tetkik</button>
+      <div class="tetkik-altsekmeler">
+        <button class="alt-sekme aktif" data-alt-sekme="dosyalar">
+          📎 Dosyalar (<span data-dosya-sayisi>${dosyaSayisi}</span>)
+        </button>
+        <button class="alt-sekme" data-alt-sekme="lab">
+          📊 Lab Defteri
+        </button>
       </div>
-      <div id="hdTetkiklerList">${_renderTetkiklerList()}</div>
+
+      <div class="alt-sekme-icerik" data-alt-icerik="dosyalar">
+        <div style="display:flex;justify-content:flex-end;margin-bottom:12px">
+          <button class="btn btn-primary" id="hdTetkikEkle"
+                  style="min-height:36px;padding:8px 16px;font-size:13px">+ Yeni Tetkik</button>
+        </div>
+        <div id="hdTetkiklerList">${_renderTetkiklerList()}</div>
+      </div>
+
+      <div class="alt-sekme-icerik" data-alt-icerik="lab" hidden>
+        <div class="lab-defteri-placeholder">
+          <div class="placeholder-icon">📊</div>
+          <h3>Lab Defteri yakında geliyor</h3>
+          <p>Tetkik PDF'lerinden lab değerleri otomatik çıkarılacak ve trend takibi yapılabilecek.</p>
+          <div class="placeholder-ozellikler">
+            <h4>Planlanan özellikler:</h4>
+            <ul>
+              <li>📊 Parametre/tarih matrisi</li>
+              <li>↑↓→ Trend okları</li>
+              <li>🔍 Referans aralık kontrolü</li>
+              <li>⚠️ Patolojik değer vurgulama</li>
+              <li>🤖 AI ile otomatik çıkarma</li>
+            </ul>
+          </div>
+        </div>
+      </div>
     </div>
   `;
+}
+
+// Tetkikler sekmesi alt-tab geçişi (Dosyalar ↔ Lab Defteri) — Sprint 1, sadece UI.
+// _attachListeners içinden build başına BİR KEZ çağrılır (çift binding olmasın).
+function _initTetkikAltSekmeler() {
+  const butonlar = _overlay.querySelectorAll('.alt-sekme');
+  butonlar.forEach(btn => {
+    btn.addEventListener('click', () => {
+      const hedef = btn.dataset.altSekme;
+      butonlar.forEach(b => b.classList.toggle('aktif', b === btn));
+      _overlay.querySelectorAll('.alt-sekme-icerik').forEach(c => {
+        c.hidden = c.dataset.altIcerik !== hedef;
+      });
+    });
+  });
 }
 
 function _renderSkorlarPanel() {
@@ -539,6 +584,9 @@ function _attachListeners() {
       tetkik.classList.toggle('expanded');
     }
   });
+
+  // Tetkikler alt-sekmeleri (Dosyalar / Lab Defteri)
+  _initTetkikAltSekmeler();
 }
 
 function _handleDelegated(e) {

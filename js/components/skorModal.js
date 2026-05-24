@@ -138,11 +138,21 @@ export function openSkorModal(skor, hasta = null, mevcut = null) {
         baslangic[inp.key] = true;
         _autofillKaynak[inp.key] = kaynak;
       } else {
-        baslangic[inp.key] = null;
+        baslangic[inp.key] = inp.varsayilan !== undefined ? inp.varsayilan : null;
       }
       continue;
     }
-    baslangic[inp.key] = inp.tip === 'bool' ? null : '';
+    // Varsayilan: modül `varsayilan` tanımladıysa onu kullan (örn. Caprini bool'ları false).
+    // enum'da default = ilk seçenek (boş '' ile "eksik" görünmesin — NIHSS baştan 0 hesaplanır).
+    if (inp.varsayilan !== undefined) {
+      baslangic[inp.key] = inp.varsayilan;
+    } else if (inp.tip === 'bool') {
+      baslangic[inp.key] = null;
+    } else if (inp.tip === 'enum') {
+      baslangic[inp.key] = inp.secenekler?.[0]?.v ?? '';
+    } else {
+      baslangic[inp.key] = '';
+    }
   }
 
   // Lab Defteri'nden anında doldur (AI yok) — yalnızca yeni hesaplamada,
@@ -152,9 +162,10 @@ export function openSkorModal(skor, hasta = null, mevcut = null) {
     const dp = _defterParsed(skor, hasta);
     if (dp) {
       const guncel = skor.applyLabParse ? skor.applyLabParse(dp, {}) : _defaultDefterApply(skor, dp);
+      // guncel yalnızca lab-değeri + türetilmiş alanları içerir (yas/cinsiyet/bool DEĞİL),
+      // bu yüzden enum default'unu (ör. CURB ureBirim) güvenle ezebilir.
       for (const [key, deger] of Object.entries(guncel)) {
         if (deger == null || deger === '') continue;
-        if (baslangic[key] !== '' && baslangic[key] != null) continue; // dolu alanı ezme
         baslangic[key] = deger;
         // Kaynak etiketi yalnızca gerçek lab-değeri input'larına (labParseAlan'lı);
         // CURB-65 ureBirim gibi türetilmiş alanlar doldurulur ama etiketlenmez/sayılmaz.

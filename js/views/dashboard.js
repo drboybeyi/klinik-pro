@@ -49,7 +49,7 @@ export class DashboardView {
           <div class="dashboard-skor-icon">🧮</div>
           <div class="dashboard-skor-body">
             <div class="dashboard-skor-baslik">Klinik Skor Hesaplayıcı</div>
-            <div class="dashboard-skor-aciklama">${SKORLAR.length} skor · kardiyo, renal, hepato, enfeksiyon, VTE</div>
+            <div class="dashboard-skor-aciklama">${SKORLAR.length} skor · kardiyo, renal, hepato, enfeksiyon, VTE, nöroloji</div>
           </div>
           <div class="dashboard-skor-ok">→</div>
         </div>

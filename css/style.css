@@ -2215,6 +2215,7 @@ body {
 .skor-kat-hepato  { --skor-renk: #c9923c; --skor-renk-bg: #fff5e0; }
 .skor-kat-infek   { --skor-renk: #6b4f9a; --skor-renk-bg: #f0ecf7; }
 .skor-kat-vte     { --skor-renk: #3a6b9a; --skor-renk-bg: #e8f0f8; }
+.skor-kat-noro    { --skor-renk: #4a3f8a; --skor-renk-bg: #ecebf7; }
 
 /* Sonuç kutusu seviye arka plan */
 .seviye-bg-kritik { background: #fff0ee; border: 1px solid #f3c2b8; }

@@ -6,8 +6,17 @@ import meld3      from './meld3.js';
 import curb65     from './curb65.js';
 import wellsPE    from './wellsPE.js';
 import wellsDVT   from './wellsDVT.js';
+import pesi       from './pesi.js';
+import padua      from './padua.js';
+import caprini    from './caprini.js';
+import abcd2      from './abcd2.js';
+import nihss      from './nihss.js';
 
-export const SKORLAR = [cha2ds2va, hasbled, ckdEpi2021, meld3, curb65, wellsPE, wellsDVT];
+export const SKORLAR = [
+  cha2ds2va, hasbled, ckdEpi2021, meld3, curb65,
+  wellsPE, wellsDVT, pesi, padua, caprini,
+  abcd2, nihss
+];
 
 const SKOR_MAP = new Map(SKORLAR.map(s => [s.id, s]));
 
@@ -20,5 +29,6 @@ export const KATEGORI_LABEL = {
   renal:   '🫘 Nefroloji',
   hepato:  '🫁 Hepatoloji',
   infek:   '🦠 Enfeksiyon',
-  vte:     '🩸 Vasküler / VTE'
+  vte:     '🩸 Vasküler / VTE',
+  noro:    '🧠 Nöroloji'
 };

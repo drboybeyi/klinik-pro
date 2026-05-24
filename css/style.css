@@ -2215,6 +2215,7 @@ body {
 .skor-kat-hepato  { --skor-renk: #c9923c; --skor-renk-bg: #fff5e0; }
 .skor-kat-infek   { --skor-renk: #6b4f9a; --skor-renk-bg: #f0ecf7; }
 .skor-kat-vte     { --skor-renk: #3a6b9a; --skor-renk-bg: #e8f0f8; }
+.skor-kat-noro    { --skor-renk: #4a3f8a; --skor-renk-bg: #ecebf7; }
 
 /* Sonuç kutusu seviye arka plan */
 .seviye-bg-kritik { background: #fff0ee; border: 1px solid #f3c2b8; }
@@ -2422,79 +2423,6 @@ body {
   font-weight: 400;
 }
 .skor-input-num, .skor-input-select { min-height: 40px; }
-
-/* Lab Parser (v0.4.1) */
-.lab-parser-row {
-  background: #fef9f0;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 10px 12px;
-  margin-bottom: 14px;
-}
-.lab-parser-btn {
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  padding: 8px 14px;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  font-family: inherit;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 38px;
-  transition: background 120ms;
-}
-.lab-parser-btn:hover:not(:disabled) {
-  background: var(--accent-hover);
-}
-.lab-parser-btn:disabled {
-  background: #b8a384;
-  cursor: not-allowed;
-}
-.lab-parser-btn small {
-  opacity: 0.85;
-  font-size: 11px;
-  font-weight: 400;
-}
-.lab-parser-btn-done {
-  background: var(--success) !important;
-}
-.lab-parser-status {
-  margin-top: 8px;
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.4;
-}
-.lab-parser-status-error {
-  color: var(--danger);
-}
-.lab-parser-status-warn {
-  color: var(--warning);
-}
-
-.lab-kaynak {
-  font-size: 11px;
-  color: var(--lab-normal);
-  margin-top: 3px;
-  font-style: italic;
-}
-.lab-kaynak-manuel {
-  color: var(--text-secondary);
-}
-
-.lab-input-uyari {
-  border-color: var(--danger) !important;
-  background: #fff8f7;
-}
-.lab-uyari-mesaj {
-  font-size: 11px;
-  color: var(--danger);
-  margin-top: 3px;
-  line-height: 1.4;
-}
 
 .skor-autofill-rozet {
   font-size: 11px;
@@ -2706,5 +2634,225 @@ body {
   font-size: 11px;
   color: var(--skor-renk, var(--accent));
   font-style: italic;
+}
+
+/* ========== Lab Defteri (v0.5) ========== */
+
+/* Tetkikler alt-tab bar */
+.tetkik-tabs {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid #d4c4a8;
+}
+.tetkik-tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-family: inherit;
+  margin-bottom: -1px;
+  transition: color 120ms, border-color 120ms;
+}
+.tetkik-tab.active {
+  color: #5a3f1f;
+  border-bottom-color: #8b6f47;
+}
+
+/* Defter üst bar */
+.lab-defteri-header {
+  background: #fef9f0;
+  border: 1px solid #d4c4a8;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.lab-durum {
+  font-size: 13px;
+  color: #5a3f1f;
+  line-height: 1.4;
+}
+.lab-status-icon { margin-right: 4px; }
+
+/* Kategori filtre chip'leri */
+.lab-kategori-filtreler {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+.kategori-chip {
+  background: #f5ede0;
+  border: 1px solid #d4c4a8;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: inherit;
+  color: #5a3f1f;
+  white-space: nowrap;
+  transition: background 120ms, color 120ms;
+}
+.kategori-chip.active {
+  background: #8b6f47;
+  color: #fff;
+  border-color: #5a3f1f;
+}
+
+/* Matris tablosu */
+.lab-matris-wrap {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid #d4c4a8;
+  -webkit-overflow-scrolling: touch;
+}
+.lab-matris {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: #fff;
+}
+.lab-matris th {
+  background: #f5ede0;
+  padding: 8px 10px;
+  text-align: center;
+  border-bottom: 2px solid #d4c4a8;
+  font-weight: 600;
+  color: #5a3f1f;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+}
+.lab-matris th.lab-param-col { text-align: left; }
+.lab-matris td {
+  padding: 6px 10px;
+  border-bottom: 1px solid #e8dcc0;
+  white-space: nowrap;
+}
+.lab-param-name {
+  font-weight: 500;
+  color: #5a3f1f;
+  text-align: left;
+  position: sticky;
+  left: 0;
+  background: #fff;
+}
+.lab-value {
+  text-align: center;
+  font-family: 'Monaco', 'Consolas', monospace;
+  color: #333;
+}
+.lab-normal          { color: #333; }
+.lab-yuksek          { color: #c94a3a; font-weight: 600; }
+.lab-dusuk           { color: #c9923c; font-weight: 600; }
+.lab-yuksek-belirgin { color: #9a3030; font-weight: 700; background: #fde8e8; }
+.lab-dusuk-belirgin  { color: #a07020; font-weight: 700; background: #fdf3e0; }
+
+.lab-trend {
+  text-align: center;
+  font-size: 17px;
+  font-weight: bold;
+}
+.lab-trend-up     { color: #c94a3a; }
+.lab-trend-down   { color: #4a8b6f; }
+.lab-trend-stable { color: #999; font-size: 12px; font-weight: 500; }
+
+.lab-ref {
+  color: #6b5640;
+  font-size: 11px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.lab-kategori-row td {
+  background: #f0e6d0;
+  font-weight: 700;
+  color: #5a3f1f;
+  padding: 8px 10px;
+  text-align: left;
+  position: sticky;
+  left: 0;
+}
+
+/* Boş durum */
+.lab-bos-mesaj {
+  text-align: center;
+  padding: 40px 20px;
+  color: #6b5640;
+}
+.lab-bos-icon { font-size: 48px; margin-bottom: 16px; }
+.lab-bos-mesaj p { margin-bottom: 18px; line-height: 1.5; }
+
+/* Tarama paneli */
+.lab-tarama-panel {
+  text-align: center;
+  padding: 48px 20px;
+  color: #5a3f1f;
+}
+.lab-tarama-spinner {
+  font-size: 40px;
+  animation: lab-spin 1.4s linear infinite;
+  display: inline-block;
+}
+@keyframes lab-spin { to { transform: rotate(360deg); } }
+.lab-tarama-baslik {
+  font-size: 16px;
+  font-weight: 600;
+  margin-top: 14px;
+}
+.lab-tarama-alt {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin-top: 6px;
+  font-family: 'Monaco', 'Consolas', monospace;
+}
+.lab-tarama-not {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+/* Skor modalı — Lab Defteri entegrasyonu */
+.lab-defter-bar {
+  font-size: 12px;
+  border-radius: 8px;
+  padding: 9px 12px;
+  margin-bottom: 14px;
+  line-height: 1.45;
+}
+.lab-defter-bar-ok {
+  background: var(--lab-normal-bg);
+  color: var(--lab-normal);
+  border: 1px solid #c3dab1;
+}
+.lab-defter-bar-bos {
+  background: #fef9f0;
+  color: #6b5640;
+  border: 1px solid #d4c4a8;
+}
+.lab-defter-kaynak {
+  font-size: 11px;
+  color: var(--lab-normal);
+  margin-top: 3px;
+  font-style: italic;
+  line-height: 1.4;
+}
+.lab-defter-eski {
+  color: var(--danger);
+  font-style: normal;
+  font-weight: 600;
+}
+.lab-defter-manuel {
+  color: var(--text-secondary);
+  font-style: normal;
 }
 

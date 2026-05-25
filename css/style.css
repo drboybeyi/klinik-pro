@@ -2949,3 +2949,93 @@ body {
   color: #6b5640;
 }
 
+/* ========== Lab Defteri statik matris önizleme (v0.4.3 Sprint 2 — dummy veri) ========== */
+.labdef-demo-uyari {
+  background: #fff4e0;
+  border: 1px solid #e3c98a;
+  color: #7a5a1f;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 12.5px;
+  line-height: 1.45;
+  margin-bottom: 14px;
+}
+.labdef-matris-wrap {
+  overflow-x: auto;
+  border: 1px solid #d4c4a8;
+  border-radius: 10px;
+  -webkit-overflow-scrolling: touch;
+}
+.labdef-matris {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  background: #fff;
+}
+.labdef-matris th {
+  background: #f5ede0;
+  color: #5a3f1f;
+  font-weight: 600;
+  text-align: center;
+  padding: 9px 10px;
+  border-bottom: 2px solid #d4c4a8;
+  white-space: nowrap;
+  position: sticky;
+  top: 0;
+}
+.labdef-matris th.labdef-param-col,
+.labdef-matris th.labdef-ref-col { text-align: left; }
+.labdef-matris td {
+  padding: 7px 10px;
+  border-bottom: 1px solid #ece0c8;
+  white-space: nowrap;
+}
+.labdef-param {
+  font-weight: 500;
+  color: #5a3f1f;
+  text-align: left;
+  position: sticky;
+  left: 0;
+  background: #fff;
+}
+.labdef-deger {
+  text-align: center;
+  font-family: 'Monaco', 'Consolas', monospace;
+  color: #333;
+}
+.labdef-yuksek          { color: #c94a3a; font-weight: 600; }
+.labdef-dusuk           { color: #c9923c; font-weight: 600; }
+.labdef-yuksek-belirgin { color: #9a3030; font-weight: 700; background: #fde8e8; }
+.labdef-trend {
+  text-align: center;
+  font-size: 16px;
+  font-weight: bold;
+}
+.labdef-trend-up     { color: #c94a3a; }
+.labdef-trend-down   { color: #4a8b6f; }
+.labdef-trend-stable { color: #999; }
+.labdef-trend-yeni,
+.labdef-trend-eski   { font-size: 11px; font-weight: 500; color: #8b6f47; }
+.labdef-kat-row td {
+  background: #f0e6d0;
+  font-weight: 700;
+  color: #5a3f1f;
+  padding: 7px 10px;
+  text-align: left;
+  position: sticky;
+  left: 0;
+}
+.labdef-ref {
+  color: #6b5640;
+  font-size: 11px;
+  text-align: left;
+  white-space: nowrap;
+}
+.labdef-demo-not {
+  font-size: 11.5px;
+  color: #8b7a5f;
+  text-align: center;
+  margin-top: 12px;
+  font-style: italic;
+}
+

@@ -274,23 +274,88 @@ function _renderTetkiklerPanel() {
       </div>
 
       <div class="alt-sekme-icerik" data-alt-icerik="lab" hidden>
-        <div class="lab-defteri-placeholder">
-          <div class="placeholder-icon">📊</div>
-          <h3>Lab Defteri yakında geliyor</h3>
-          <p>Tetkik PDF'lerinden lab değerleri otomatik çıkarılacak ve trend takibi yapılabilecek.</p>
-          <div class="placeholder-ozellikler">
-            <h4>Planlanan özellikler:</h4>
-            <ul>
-              <li>📊 Parametre/tarih matrisi</li>
-              <li>↑↓→ Trend okları</li>
-              <li>🔍 Referans aralık kontrolü</li>
-              <li>⚠️ Patolojik değer vurgulama</li>
-              <li>🤖 AI ile otomatik çıkarma</li>
-            </ul>
-          </div>
-        </div>
+        ${_renderLabDefteriDemo()}
       </div>
     </div>
+  `;
+}
+
+// Sprint 2: STATİK (sahte veri) Lab Defteri matris önizlemesi — backend/veri YOK.
+// Tüm değerler temsilîdir; gerçek tetkik verisi sonraki sprint'te bağlanacak.
+function _renderLabDefteriDemo() {
+  return `
+    <div class="labdef-demo-uyari">
+      🔸 <strong>Örnek görünüm</strong> — gerçek tetkik verisi henüz bağlı değil.
+      Aşağıdaki değerler yalnızca tasarım önizlemesidir.
+    </div>
+    <div class="labdef-matris-wrap">
+      <table class="labdef-matris">
+        <thead>
+          <tr>
+            <th class="labdef-param-col">Parametre</th>
+            <th>06.05</th>
+            <th>14.04</th>
+            <th>28.03</th>
+            <th>Trend</th>
+            <th class="labdef-ref-col">Referans</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="labdef-kat-row"><td colspan="6">🩸 Kardiyovasküler</td></tr>
+          <tr>
+            <td class="labdef-param">BNP</td>
+            <td class="labdef-deger labdef-yuksek">817</td>
+            <td class="labdef-deger">–</td>
+            <td class="labdef-deger">–</td>
+            <td class="labdef-trend labdef-trend-yeni">Yeni</td>
+            <td class="labdef-ref">&lt;100 pg/mL</td>
+          </tr>
+          <tr>
+            <td class="labdef-param">Troponin I</td>
+            <td class="labdef-deger labdef-yuksek">0.08</td>
+            <td class="labdef-deger">0.02</td>
+            <td class="labdef-deger">–</td>
+            <td class="labdef-trend labdef-trend-up">↑</td>
+            <td class="labdef-ref">&lt;0.04 ng/mL</td>
+          </tr>
+
+          <tr class="labdef-kat-row"><td colspan="6">🧪 Biyokimya</td></tr>
+          <tr>
+            <td class="labdef-param">Kreatinin</td>
+            <td class="labdef-deger">0.56</td>
+            <td class="labdef-deger">0.58</td>
+            <td class="labdef-deger">0.62</td>
+            <td class="labdef-trend labdef-trend-down">↓</td>
+            <td class="labdef-ref">0.7–1.2 mg/dL</td>
+          </tr>
+          <tr>
+            <td class="labdef-param">Sodyum</td>
+            <td class="labdef-deger">142</td>
+            <td class="labdef-deger">140</td>
+            <td class="labdef-deger">141</td>
+            <td class="labdef-trend labdef-trend-stable">→</td>
+            <td class="labdef-ref">136–145 mEq/L</td>
+          </tr>
+          <tr>
+            <td class="labdef-param">CRP</td>
+            <td class="labdef-deger labdef-yuksek-belirgin">111.6</td>
+            <td class="labdef-deger labdef-yuksek">45</td>
+            <td class="labdef-deger">5</td>
+            <td class="labdef-trend labdef-trend-up">↑</td>
+            <td class="labdef-ref">&lt;5 mg/L</td>
+          </tr>
+          <tr>
+            <td class="labdef-param">Albümin</td>
+            <td class="labdef-deger">–</td>
+            <td class="labdef-deger labdef-dusuk">2.9</td>
+            <td class="labdef-deger">–</td>
+            <td class="labdef-trend labdef-trend-eski">Eski</td>
+            <td class="labdef-ref">3.5–5.0 g/dL</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="labdef-demo-not">Sonraki sprint: tetkiklerden gerçek lab değerleri + AI ile otomatik çıkarma.</div>
   `;
 }
 

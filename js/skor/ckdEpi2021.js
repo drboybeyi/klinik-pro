@@ -14,7 +14,7 @@ export default {
     { key: 'yas',      tip: 'sayi', label: 'Yaş', min: 18, max: 120, autofill: 'yas' },
     { key: 'cinsiyet', tip: 'enum', label: 'Cinsiyet', autofill: 'cinsiyet',
       secenekler: [{ v: 'E', label: 'Erkek' }, { v: 'K', label: 'Kadın' }] },
-    { key: 'kreatinin', tip: 'ondalik', label: 'Serum kreatinin', birim: 'mg/dL', min: 0.1, max: 20, adim: 0.01, labParseAlan: 'kreatinin' }
+    { key: 'kreatinin', tip: 'ondalik', label: 'Serum kreatinin', birim: 'mg/dL', min: 0.1, max: 20, adim: 0.01, labParseAlan: 'kreatinin', labDefterKey: 'kreatinin' }
   ],
 
   calc(v) {

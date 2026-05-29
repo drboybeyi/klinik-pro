@@ -2424,6 +2424,41 @@ body {
 }
 .skor-input-num, .skor-input-select { min-height: 40px; }
 
+/* Lab Defteri / Lab Parser kaynak etiketleri (skor input altı) */
+.lab-kaynak {
+  font-size: 11px;
+  margin-top: -2px;
+  font-style: italic;
+  color: var(--text-secondary);
+}
+.lab-kaynak-eski {
+  color: var(--warning);
+  font-weight: 500;
+  font-style: normal;
+}
+.lab-kaynak-cok-eski {
+  color: var(--lab-critical);
+  font-weight: 600;
+  font-style: normal;
+}
+.lab-kaynak-yok {
+  color: var(--warning);
+  font-style: normal;
+}
+.lab-kaynak-manuel {
+  color: var(--lab-normal);
+  font-style: normal;
+}
+.lab-uyari-mesaj {
+  font-size: 11px;
+  color: var(--warning);
+  font-weight: 500;
+}
+.lab-input-uyari {
+  border-color: var(--warning) !important;
+  background: #fff8ee;
+}
+
 .skor-autofill-rozet {
   font-size: 11px;
   color: var(--lab-normal);

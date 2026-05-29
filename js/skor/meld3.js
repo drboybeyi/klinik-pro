@@ -21,11 +21,11 @@ export default {
   inputs: [
     { key: 'cinsiyet', tip: 'enum', label: 'Cinsiyet', autofill: 'cinsiyet',
       secenekler: [{ v: 'E', label: 'Erkek' }, { v: 'K', label: 'Kadın' }] },
-    { key: 'bilirubin', tip: 'ondalik', label: 'Total bilirubin', birim: 'mg/dL', min: 0.1, max: 50, adim: 0.1,  labParseAlan: 'bilirubin' },
-    { key: 'inr',       tip: 'ondalik', label: 'INR',             birim: '',      min: 0.5, max: 20, adim: 0.01, labParseAlan: 'inr' },
-    { key: 'kreatinin', tip: 'ondalik', label: 'Serum kreatinin', birim: 'mg/dL', min: 0.1, max: 15, adim: 0.01, labParseAlan: 'kreatinin' },
-    { key: 'sodyum',    tip: 'sayi',    label: 'Serum sodyum',    birim: 'mEq/L', min: 100, max: 160, labParseAlan: 'sodyum' },
-    { key: 'albumin',   tip: 'ondalik', label: 'Serum albümin',   birim: 'g/dL',  min: 0.5, max: 7,  adim: 0.1,  labParseAlan: 'albumin' },
+    { key: 'bilirubin', tip: 'ondalik', label: 'Total bilirubin', birim: 'mg/dL', min: 0.1, max: 50, adim: 0.1,  labParseAlan: 'bilirubin', labDefterKey: 'bilirubin_total' },
+    { key: 'inr',       tip: 'ondalik', label: 'INR',             birim: '',      min: 0.5, max: 20, adim: 0.01, labParseAlan: 'inr',       labDefterKey: 'INR' },
+    { key: 'kreatinin', tip: 'ondalik', label: 'Serum kreatinin', birim: 'mg/dL', min: 0.1, max: 15, adim: 0.01, labParseAlan: 'kreatinin', labDefterKey: 'kreatinin' },
+    { key: 'sodyum',    tip: 'sayi',    label: 'Serum sodyum',    birim: 'mEq/L', min: 100, max: 160, labParseAlan: 'sodyum', labDefterKey: 'sodyum' },
+    { key: 'albumin',   tip: 'ondalik', label: 'Serum albümin',   birim: 'g/dL',  min: 0.5, max: 7,  adim: 0.1,  labParseAlan: 'albumin', labDefterKey: 'albumin' },
     { key: 'diyaliz',   tip: 'bool',    label: 'Haftada ≥2 diyaliz veya 24 sa CRRT (son hafta)',
       autofillTanilar: ['diyaliz', 'hemodiyaliz', 'crrt'] }
   ],

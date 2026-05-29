@@ -7,6 +7,7 @@ import { saveSkor } from '../db.js';
 import { getState } from '../state.js';
 import { showToast } from './toast.js';
 import { parseLabValues, labDegerKontrol } from '../skor/labParser.js';
+import { sonOlcumGetir, formatTarih } from '../labDefteri/labDefteriHelper.js';
 
 let _overlay = null;
 // Mevcut modal için: input key → eşleşmenin kaynağı (gösterim için)
@@ -198,6 +199,9 @@ export function openSkorModal(skor, hasta = null, mevcut = null) {
     el.addEventListener('input', () => _labKaynakGizle(el.dataset.key));
     el.addEventListener('change', () => _labKaynakGizle(el.dataset.key));
   });
+
+  // Lab Defteri'nden ANINDA doldur (AI yok). Düzenleme değilse.
+  _labDefteriDoldur(skor, hasta, mevcut);
 }
 
 function _renderInput(inp, value) {
@@ -212,6 +216,7 @@ function _renderInput(inp, value) {
           <button type="button" class="skor-bool-btn ${aktif === 'hayir' ? 'active' : ''}" data-v="0">Hayır</button>
           <button type="button" class="skor-bool-btn ${aktif === 'evet'  ? 'active' : ''}" data-v="1">Evet</button>
         </div>
+        ${inp.labDefterEsik ? `<div class="lab-kaynak" data-lab-kaynak="${inp.key}" hidden></div>` : ''}
       </div>
     `;
   }
@@ -364,6 +369,112 @@ function _defaultApplyLabParse(skor, parsedData) {
   return out;
 }
 
+// --- Lab Defteri entegrasyonu (v0.4.7 — AI yok, anında) ---
+
+// Modal render edildikten SONRA: labDefterKey'i olan input'ları hasta.labDefteri'nden
+// doldur. Düzenleme (mevcut) ise atla — kullanıcının onayladığı snapshot korunur.
+function _labDefteriDoldur(skor, hasta, mevcut) {
+  if (!hasta || mevcut) return;
+  if (!hasta.labDefteri?.parametreler) return; // henüz tarama yapılmamış → sessiz
+
+  let degisti = false;
+
+  for (const inp of skor.inputs) {
+    // 1) Sayısal/enum input: değer doldur
+    if (inp.labDefterKey) {
+      const keys = Array.isArray(inp.labDefterKey) ? inp.labDefterKey : [inp.labDefterKey];
+      let labData = null, kullanilanIsim = null;
+      for (const k of keys) {
+        labData = sonOlcumGetir(hasta, k);
+        if (labData) { kullanilanIsim = labData.isim; break; }
+      }
+      _labDefteriInputDoldur(inp, labData, keys.length > 1 ? kullanilanIsim : null);
+      if (labData) {
+        if (inp.labDefterEk) {
+          const ekEl = document.querySelector(`#smForm [data-key="${inp.labDefterEk.input}"]`);
+          if (ekEl) ekEl.value = inp.labDefterEk.deger;
+        }
+        degisti = true;
+      }
+    }
+
+    // 2) Bool input + eşik (örn. HAS-BLED renal: Kr ≥2.26)
+    if (inp.labDefterEsik) {
+      const { key, op, deger } = inp.labDefterEsik;
+      const labData = sonOlcumGetir(hasta, key);
+      if (labData && _esikSagla(labData.deger, op, deger)) {
+        const grp = document.querySelector(`#smForm .skor-bool-grp[data-key="${inp.key}"]`);
+        if (grp) {
+          grp.querySelectorAll('.skor-bool-btn').forEach(b => b.classList.remove('active'));
+          grp.querySelector('.skor-bool-btn[data-v="1"]')?.classList.add('active');
+        }
+        const el = document.querySelector(`[data-lab-kaynak="${inp.key}"]`);
+        if (el) {
+          el.hidden = false;
+          el.className = 'lab-kaynak';
+          el.textContent = `📄 ${labData.isim} ${labData.deger} (${op} ${deger}) · ${formatTarih(labData.tarih)}`;
+        }
+        degisti = true;
+      }
+    }
+  }
+
+  if (degisti) _refreshSonuc(skor);
+}
+
+// Tek bir num/enum input'u Lab Defteri verisiyle doldur + kaynak etiketi göster.
+function _labDefteriInputDoldur(inp, labData, kullanilanIsim) {
+  const input   = document.querySelector(`#smForm [data-key="${inp.key}"]`);
+  const kaynakEl = document.querySelector(`[data-lab-kaynak="${inp.key}"]`);
+  if (!input || !kaynakEl) return;
+
+  if (labData && labData.deger != null) {
+    input.value = labData.deger;
+
+    let metin = `📄 ${formatTarih(labData.tarih)}`;
+    if (kullanilanIsim) metin += ` · ${kullanilanIsim}`;
+    let renkClass = '';
+    if (labData.cokEski) {
+      metin += ` (${labData.gunFarki} gün eski — güncel değil)`;
+      renkClass = 'lab-kaynak-cok-eski';
+    } else if (labData.eski) {
+      metin += ` (${labData.gunFarki} gün eski)`;
+      renkClass = 'lab-kaynak-eski';
+    } else {
+      metin += ` (${labData.gunFarki} gün önce)`;
+    }
+    kaynakEl.textContent = metin;
+    kaynakEl.className = `lab-kaynak ${renkClass}`.trim();
+    kaynakEl.hidden = false;
+    _labKaynak[inp.key] = { tarih: labData.tarih };
+
+    // Sınır kontrolü (labParseAlan üzerinden)
+    if (inp.labParseAlan) {
+      const k = labDegerKontrol(inp.labParseAlan, labData.deger);
+      if (k.uyari) {
+        input.classList.add('lab-input-uyari');
+        _labUyariGoster(inp.key, k.uyari);
+      }
+    }
+  } else {
+    kaynakEl.textContent = '⚠️ Lab defterinde yok — manuel girin veya tetkik yükleyin';
+    kaynakEl.className = 'lab-kaynak lab-kaynak-yok';
+    kaynakEl.hidden = false;
+  }
+}
+
+function _esikSagla(deger, op, esik) {
+  const d = +deger;
+  if (Number.isNaN(d)) return false;
+  switch (op) {
+    case '>=': return d >= esik;
+    case '>':  return d > esik;
+    case '<=': return d <= esik;
+    case '<':  return d < esik;
+    default:   return false;
+  }
+}
+
 function _labKaynakGoster(key, tarih) {
   const el = document.querySelector(`[data-lab-kaynak="${key}"]`);
   if (!el) return;
@@ -378,8 +489,8 @@ function _labKaynakGizle(key) {
   const uyari  = document.querySelector(`[data-lab-uyari="${key}"]`);
   const input  = document.querySelector(`#smForm [data-key="${key}"]`);
   if (kaynak && !kaynak.hidden) {
-    kaynak.textContent = '✏️ Manuel';
-    kaynak.classList.add('lab-kaynak-manuel');
+    kaynak.textContent = '✏️ Manuel girildi';
+    kaynak.className = 'lab-kaynak lab-kaynak-manuel';
     // Manuel olduğu için uyarı da kaldır
   }
   if (uyari) {

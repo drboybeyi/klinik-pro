@@ -13,7 +13,8 @@ export default {
     // HT için autofill yok: sistolik >160 ek bulgu gerektirir
     { key: 'ht',       tip: 'bool', label: 'Kontrolsüz HT (sistolik >160 mmHg)' },
     { key: 'renal',    tip: 'bool', label: 'Anormal renal fonksiyon (diyaliz, transplant, Cr ≥2.26 mg/dL)',
-      autofillTanilar: ['kbh', 'kronik böbrek', 'ckd', 'son dönem böbrek', 'diyaliz', 'transplant'] },
+      autofillTanilar: ['kbh', 'kronik böbrek', 'ckd', 'son dönem böbrek', 'diyaliz', 'transplant'],
+      labDefterEsik: { key: 'kreatinin', op: '>=', deger: 2.26 } },
     { key: 'hepatik',  tip: 'bool', label: 'Anormal karaciğer fonksiyonu (siroz, Bil >2x, AST/ALT >3x)',
       autofillTanilar: ['siroz', 'cirrhosis', 'karaciğer yetmezliği', 'kc yetmezliği', 'child b', 'child c', 'meld'] },
     { key: 'inme',     tip: 'bool', label: 'İnme öyküsü',

@@ -26,7 +26,9 @@ export default {
 
   inputs: [
     { key: 'konfuzyon', tip: 'bool', label: 'Konfüzyon (yeni başlangıçlı dezoryantasyon)' },
-    { key: 'ure',       tip: 'ondalik', label: 'Üre / BUN', birim: 'mmol/L (BUN için >19 mg/dL)', min: 0, max: 100, adim: 0.1, labParseAlan: 'ure' },
+    { key: 'ure',       tip: 'ondalik', label: 'Üre / BUN', birim: 'mmol/L (BUN için >19 mg/dL)', min: 0, max: 100, adim: 0.1, labParseAlan: 'ure',
+      // Lab Defteri'nde hem BUN hem üre mg/dL saklanır → birim 'mgdl'. BUN tercih edilir.
+      labDefterKey: ['BUN', 'ure'], labDefterEk: { input: 'ureBirim', deger: 'mgdl' } },
     { key: 'ureBirim',  tip: 'enum', label: 'Birim',
       secenekler: [
         { v: 'mmol', label: 'mmol/L' },

@@ -48,6 +48,7 @@ let _overlay  = null;
 let _hastaId  = null;
 let _aktifTab = 'ozet';
 let _unsubs   = [];
+let _labUyari = null;  // son taramada sanity check'ten atlanan ölçümler (bir kez gösterilir)
 
 export function openHastaDetay(hastaId) {
   _hastaId  = hastaId;
@@ -304,10 +305,24 @@ function _renderLabDefteriIcerik() {
       <span class="lab-tarama-spin">⏳</span> AI tetkikleri okuyor… <small>(30-60 sn sürebilir)</small>
       <div class="lab-tarama-akan" data-lab-progress-text></div>
     </div>
+    ${_renderLabUyari()}
     ${dolu
       ? _renderLabMatris(defter)
       : `<div class="labdef-bos">📭 Henüz lab defteri yok. PDF/görüntü tetkiklerinden lab değerlerini çıkarmak için yukarıdaki butona tıkla.</div>`}
   `;
+}
+
+// Sanity check uyarı banner'ı — sadece son taramada atlanan değer varsa.
+// _labUyari render edildikten sonra temizlenir (bir kez gösterilir; hücre edit
+// gibi sonraki refresh'lerde tekrar çıkmaz).
+function _renderLabUyari() {
+  if (!_labUyari || !_labUyari.length) return '';
+  const sayi = _labUyari.length;
+  const liste = _labUyari
+    .map(a => `${_labEsc(a.key)} ${_labEsc(String(a.deger))} (${_labEsc(a.sinir)})`)
+    .join(', ');
+  _labUyari = null;
+  return `<div class="labdef-uyari">⚠️ ${sayi} değer şüpheli (mantıklı aralık dışı) atlandı: ${liste}. Doğru değeri ➕ ile elle girebilirsin.</div>`;
 }
 
 function _renderLabMatris(defter) {
@@ -610,11 +625,15 @@ async function _aiLabTara() {
       return;
     }
 
+    // Sanity check'ten atlanan değerleri banner için sakla (RTDB'ye yazılmaz)
+    _labUyari = sonuc.meta.atlanan?.length ? sonuc.meta.atlanan : null;
+
     await updateHasta(_hastaId, { labDefteri: sonuc.labDefteri });
     const m = sonuc.meta;
     const paramSayisi = Object.keys(sonuc.labDefteri.parametreler).length;
     let msg = `✅ ${m.taranansayi} tetkik tarandı · ${paramSayisi} parametre`;
     if (m.atilansayi > 0) msg += ` · ${m.atilansayi} tetkik 30 MB'tan atıldı`;
+    if (m.atlanan?.length) msg += ` · ${m.atlanan.length} değer şüpheli atlandı`;
     showToast(msg, 'success');
     // updateHasta → hastalar subscribe → _refreshLabDefteri (matris + buton resetlenir)
   } catch (e) {

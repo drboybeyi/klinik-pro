@@ -3162,6 +3162,18 @@ body {
   max-height: 48px;
   overflow: hidden;
 }
+/* Sanity check uyarı banner'ı (v0.4.8 Sprint 5B) */
+.labdef-uyari {
+  background: #fff8e1;
+  border: 1px solid #e8c860;
+  border-left: 3px solid #d9a826;
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12.5px;
+  color: #7a5c10;
+  line-height: 1.5;
+  margin-bottom: 12px;
+}
 .labdef-bos {
   text-align: center;
   padding: 40px 20px;

@@ -75,6 +75,69 @@ export const PARAM_META = {
   totalKolesterol: { isim: 'Total Kolesterol', birim: 'mg/dL', kategori: 'lipid', max: 200 }
 };
 
+// Sanity (akıl) aralığı — fizyolojik olarak MÜMKÜN geniş bant.
+// PARAM_META.referans'tan FARKLI: referans = normal aralık (renklendirme için),
+// SANITY_RANGE = parse/birim hatası eleme (ör. BNP 0.82 → birim karışıklığı).
+// Gerçek-ama-anormal değerleri elemeMEK için bantlar bilerek geniş tutulur.
+const SANITY_RANGE = {
+  // kardiyo
+  BNP:       { min: 1,   max: 35000 },
+  proBNP:    { min: 1,   max: 70000 },
+  troponin:  { min: 0,   max: 1000 },
+  // biyokimya
+  kreatinin:       { min: 0.1, max: 25 },
+  BUN:             { min: 1,   max: 300 },
+  ure:             { min: 1,   max: 500 },
+  AST:             { min: 1,   max: 10000 },
+  ALT:             { min: 1,   max: 10000 },
+  ALP:             { min: 5,   max: 5000 },
+  GGT:             { min: 1,   max: 5000 },
+  bilirubin_total: { min: 0.1, max: 60 },
+  albumin:         { min: 0.5, max: 7 },
+  // elektrolit
+  sodyum:    { min: 100, max: 190 },
+  potasyum:  { min: 1,   max: 10 },
+  klor:      { min: 60,  max: 160 },
+  kalsiyum:  { min: 4,   max: 20 },
+  fosfor:    { min: 0.5, max: 20 },
+  magnezyum: { min: 0.3, max: 8 },
+  // hemogram
+  hemoglobin: { min: 2,   max: 25 },
+  hematokrit: { min: 8,   max: 75 },
+  MCV:        { min: 50,  max: 150 },
+  WBC:        { min: 0.1, max: 200 },
+  trombosit:  { min: 2,   max: 2000 },
+  ferritin:   { min: 1,   max: 100000 },
+  // enflamasyon
+  CRP:  { min: 0, max: 600 },
+  ESR:  { min: 0, max: 150 },
+  // endokrin
+  TSH:          { min: 0.001, max: 150 },
+  fT4:          { min: 0.05,  max: 12 },
+  fT3:          { min: 0.3,   max: 50 },
+  HbA1c:        { min: 3,     max: 20 },
+  glukoz_aclik: { min: 20,    max: 1500 },
+  // koag
+  INR:     { min: 0.5, max: 12 },
+  aPTT:    { min: 10,  max: 250 },
+  D_dimer: { min: 0,   max: 100 },
+  // lipid
+  LDL:             { min: 5,  max: 600 },
+  HDL:             { min: 5,  max: 200 },
+  trigliserit:     { min: 5,  max: 10000 },
+  totalKolesterol: { min: 20, max: 1000 }
+};
+
+// Bir ölçümün fizyolojik olarak mümkün olup olmadığını kontrol eder.
+// Bilinmeyen parametre → her zaman geçer (dokunma).
+function sanityCheck(key, deger) {
+  const r = SANITY_RANGE[key];
+  if (!r) return { ok: true };
+  if (r.min != null && deger < r.min) return { ok: false, sinir: `< ${r.min}` };
+  if (r.max != null && deger > r.max) return { ok: false, sinir: `> ${r.max}` };
+  return { ok: true };
+}
+
 /**
  * Hastanın PDF/görüntü tetkiklerini AI ile tarar.
  * @param {Object} hasta — hasta objesi (şimdilik kullanılmıyor ama imza ileride lazım)
@@ -146,7 +209,8 @@ export async function topluLabTara(hasta, tetkikler, { onProgress, signal } = {}
   try { parsed = _extractJson(text); }
   catch { return { error: 'AI yanıtı JSON olarak ayrıştırılamadı', raw: text.slice(0, 500) }; }
 
-  const labDefteri = buildLabDefteri(parsed, dahil);
+  const atlanan = [];
+  const labDefteri = buildLabDefteri(parsed, dahil, atlanan);
   if (!Object.keys(labDefteri.parametreler).length) {
     return { error: 'Taramada hiçbir lab değeri bulunamadı', raw: text.slice(0, 500) };
   }
@@ -156,13 +220,15 @@ export async function topluLabTara(hasta, tetkikler, { onProgress, signal } = {}
     meta: {
       taranansayi:   dahil.length,
       atilansayi:    atilan.length,
-      toplamBoyutMB: (toplam / 1024 / 1024).toFixed(1)
+      toplamBoyutMB: (toplam / 1024 / 1024).toFixed(1),
+      atlanan
     }
   };
 }
 
 // parsed JSON → labDefteri (parametre metadata + tarih→tetkik kaynağı)
-export function buildLabDefteri(parsed, tetkikler = []) {
+// atlanan: opsiyonel dizi — sanity check'ten geçmeyen ölçümler buraya itilir.
+export function buildLabDefteri(parsed, tetkikler = [], atlanan = null) {
   const tarihId = new Map();
   for (const t of tetkikler) if (t.tarih && !tarihId.has(t.tarih)) tarihId.set(t.tarih, t.id);
 
@@ -173,6 +239,14 @@ export function buildLabDefteri(parsed, tetkikler = []) {
     for (const [key, ham] of Object.entries(olcum?.degerler || {})) {
       const deger = _sayi(ham);
       if (deger == null) continue;
+
+      // Sanity check — fizyolojik olarak imkansız değerleri at (ör. BNP 0.82)
+      const sc = sanityCheck(key, deger);
+      if (!sc.ok) {
+        console.warn(`[Lab Sanity ❌] ${key}: ${deger} ${sc.sinir} (mantıklı aralık dışı, atlandı)`);
+        atlanan?.push({ key, deger, tarih, sinir: sc.sinir });
+        continue;
+      }
 
       if (!defter.parametreler[key]) {
         const m = PARAM_META[key];

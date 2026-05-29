@@ -3034,10 +3034,61 @@ body {
   background: #fff;
 }
 .labdef-deger {
+  position: relative;
   text-align: center;
   font-family: 'Monaco', 'Consolas', monospace;
   color: #333;
 }
+/* Manuel düzeltilmiş hücre — yeşil zemin + ✏️ işareti (v0.4.8 Sprint 5A) */
+.labdef-deger-manuel { background: #f5ffe0 !important; }
+.labdef-deger-manuel .labdef-deger-val::before {
+  content: "✏️";
+  font-size: 9px;
+  opacity: 0.65;
+  margin-right: 2px;
+}
+/* Hücre üzeri hover aksiyonları (düzenle / sil) */
+.labdef-cell-actions {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  display: none;
+  gap: 2px;
+}
+.labdef-deger:hover .labdef-cell-actions { display: flex; }
+.labdef-cell-btn {
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid #d4c4a8;
+  border-radius: 3px;
+  padding: 0 3px;
+  cursor: pointer;
+  font-size: 10px;
+  line-height: 1.4;
+}
+.labdef-cell-btn:hover { background: #fef9f0; border-color: #8b6f47; }
+/* Hücre inline edit modu */
+.labdef-edit-mode { white-space: nowrap; }
+.labdef-edit-input {
+  width: 56px;
+  padding: 2px 4px;
+  font-size: 12px;
+  font-family: 'Monaco', 'Consolas', monospace;
+  border: 1px solid #8b6f47;
+  border-radius: 3px;
+  text-align: center;
+}
+.labdef-edit-ok,
+.labdef-edit-iptal {
+  border: 1px solid #d4c4a8;
+  background: #fff;
+  border-radius: 3px;
+  padding: 1px 4px;
+  cursor: pointer;
+  font-size: 11px;
+  margin-left: 2px;
+}
+.labdef-edit-ok:hover     { background: #f0f5eb; border-color: #5a7a3a; }
+.labdef-edit-iptal:hover  { background: #fde8e8; border-color: #c94a3a; }
 .labdef-yuksek          { color: #c94a3a; font-weight: 600; }
 .labdef-dusuk           { color: #c9923c; font-weight: 600; }
 .labdef-yuksek-belirgin { color: #9a3030; font-weight: 700; background: #fde8e8; }

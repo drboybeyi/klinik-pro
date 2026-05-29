@@ -15,7 +15,8 @@ import { confirm }         from '../components/modal.js';
 import { showToast }       from '../components/toast.js';
 import { formatTarih, gunFarki, bugun } from '../utils.js';
 import { renderAiPanel, attachAiListeners, resetAi, refreshAiGecmis, refreshAiDosyaInfo } from '../components/aiSorgu.js';
-import { topluLabTara } from '../labDefteri/aiTarayici.js';
+import { topluLabTara, PARAM_META } from '../labDefteri/aiTarayici.js';
+import { updateLabDeger, deleteLabDeger, addYeniLabDeger } from '../labDefteri/labDefteriDb.js';
 
 const SEMPTOM_FIELDS = [
   { key: 'sikayetler', label: 'Başvuru Şikayetleri', icon: '📋' },
@@ -295,6 +296,8 @@ function _renderLabDefteriIcerik() {
     <div class="lab-tarama-bar">
       <button class="btn btn-primary" data-ai-tara
               style="min-height:36px;padding:8px 16px;font-size:13px">🤖 AI ile Tetkikleri Tara</button>
+      <button class="btn btn-secondary" data-lab-yeni
+              style="min-height:36px;padding:8px 16px;font-size:13px">➕ Yeni Lab Değeri</button>
       <span class="lab-son-tarama">${sonGun ? `Son tarama: ${sonGun}` : 'Henüz taranmadı'}</span>
     </div>
     <div class="lab-tarama-progress" data-lab-progress hidden>
@@ -322,7 +325,7 @@ function _renderLabMatris(defter) {
   };
 
   const rows = Object.entries(params).map(([key, p]) => ({
-    isim: p.isim || key, birim: p.birim || '', referans: p.referans || null,
+    key, isim: p.isim || key, birim: p.birim || '', referans: p.referans || null,
     kategori: p.kategori || 'diger',
     olcumler: (p.olcumler || []).slice().sort((a, b) => new Date(b.tarih) - new Date(a.tarih))
   }));
@@ -335,9 +338,16 @@ function _renderLabMatris(defter) {
     const satir = g.rows.map(r => {
       const cells = tarihler.map(t => {
         const o = r.olcumler.find(x => x.tarih === t);
-        if (!o || o.deger == null) return `<td class="labdef-deger">–</td>`;
+        if (!o || o.deger == null)
+          return `<td class="labdef-deger labdef-deger-bos" data-param="${_labEsc(r.key)}" data-tarih="${t}">–</td>`;
         const cls = _labDurum(o.deger, r.referans);
-        return `<td class="labdef-deger ${cls}">${_labFmt(o.deger)}</td>`;
+        const man = o.manuel ? ' labdef-deger-manuel' : '';
+        return `<td class="labdef-deger ${cls}${man}" data-param="${_labEsc(r.key)}" data-tarih="${t}">`
+          + `<span class="labdef-deger-val">${_labFmt(o.deger)}</span>`
+          + `<span class="labdef-cell-actions">`
+          +   `<button class="labdef-cell-btn" data-lab-edit title="Düzenle">✏️</button>`
+          +   `<button class="labdef-cell-btn" data-lab-del title="Sil">🗑️</button>`
+          + `</span></td>`;
       }).join('');
       const tr = _labTrend(r.olcumler);
       const ref = _labRefMetni(r.referans, r.birim);
@@ -418,6 +428,166 @@ function _refreshLabDefteri() {
 
 function _attachLabDefteriListeners() {
   _overlay?.querySelector('[data-ai-tara]')?.addEventListener('click', _aiLabTara);
+  _overlay?.querySelector('[data-lab-yeni]')?.addEventListener('click', _openYeniLabModal);
+
+  // Matris hücre işlemleri — delegated (wrap her render'da yeniden oluşur,
+  // bu yüzden listener yığılmaz).
+  const wrap = _overlay?.querySelector('.labdef-matris-wrap');
+  if (wrap) {
+    wrap.addEventListener('click', _labMatrisClick);
+    wrap.addEventListener('keydown', _labEditKeydown);
+  }
+}
+
+// --- Lab Defteri manuel düzeltme (v0.4.8 Sprint 5A) ---
+
+function _labMatrisClick(e) {
+  const td = e.target.closest('td.labdef-deger');
+  if (!td) return;
+
+  if (e.target.closest('[data-lab-edit]'))      return _labHucreEditAc(td);
+  if (e.target.closest('[data-lab-del]'))       return _labHucreSil(td);
+  if (e.target.closest('[data-lab-edit-ok]'))   return _labHucreKaydet(td);
+  if (e.target.closest('[data-lab-edit-iptal]'))return _refreshLabDefteri();
+}
+
+function _labHucreEditAc(td) {
+  // Aynı anda tek hücre edit modunda olsun
+  if (_overlay?.querySelector('.labdef-edit-input')) _refreshLabDefteri();
+  const td2 = _overlay?.querySelector(
+    `td.labdef-deger[data-param="${CSS.escape(td.dataset.param)}"][data-tarih="${td.dataset.tarih}"]`
+  ) || td;
+  const eskiDeger = td2.querySelector('.labdef-deger-val')?.textContent || '';
+  td2.classList.add('labdef-edit-mode');
+  td2.innerHTML =
+      `<input type="number" step="0.01" class="labdef-edit-input" value="${eskiDeger}">`
+    + `<button class="labdef-edit-ok" data-lab-edit-ok title="Kaydet">✓</button>`
+    + `<button class="labdef-edit-iptal" data-lab-edit-iptal title="İptal">✗</button>`;
+  const inp = td2.querySelector('.labdef-edit-input');
+  inp?.focus();
+  inp?.select();
+}
+
+async function _labHucreKaydet(td) {
+  const param = td.dataset.param;
+  const tarih = td.dataset.tarih;
+  const ham   = td.querySelector('.labdef-edit-input')?.value;
+  const deger = parseFloat(ham);
+  if (Number.isNaN(deger)) { showToast('Geçerli bir sayı girin', 'error'); return; }
+
+  try {
+    await updateLabDeger(_hasta(), param, tarih, deger);
+    showToast('Değer güncellendi', 'success');
+    // updateHasta → subscribe('hastalar') → _refreshLabDefteri otomatik yeniler
+  } catch (err) {
+    showToast('Kayıt hatası: ' + (err.message || err), 'error');
+    _refreshLabDefteri();
+  }
+}
+
+async function _labHucreSil(td) {
+  const param = td.dataset.param;
+  const tarih = td.dataset.tarih;
+  const eskiDeger = td.querySelector('.labdef-deger-val')?.textContent || '';
+  const ok = await confirm(`${param} = ${eskiDeger} (${_labKisaTarih(tarih)}) silinecek. Emin misin?`);
+  if (!ok) return;
+
+  try {
+    await deleteLabDeger(_hasta(), param, tarih);
+    showToast('Değer silindi', 'info');
+  } catch (err) {
+    showToast('Silme hatası: ' + (err.message || err), 'error');
+    _refreshLabDefteri();
+  }
+}
+
+function _labEditKeydown(e) {
+  if (!e.target.classList?.contains('labdef-edit-input')) return;
+  const td = e.target.closest('td.labdef-deger');
+  if (!td) return;
+  if (e.key === 'Enter')      { e.preventDefault(); _labHucreKaydet(td); }
+  else if (e.key === 'Escape'){ e.preventDefault(); _refreshLabDefteri(); }
+}
+
+// Kategori-gruplu parametre <option>'larını PARAM_META'dan üret
+function _labParamOptions() {
+  const KATAD = {
+    kardiyo: '🩸 Kardiyovasküler', biyokimya: '🧪 Biyokimya', elektrolit: '🫧 Elektrolit',
+    hemogram: '🩸 Hemogram', enflamasyon: '🦠 Enflamasyon', endokrin: '🧬 Endokrin',
+    koag: '🩺 Koagülasyon', lipid: '💧 Lipid', diger: '📁 Diğer'
+  };
+  const KATSIRA = ['kardiyo', 'biyokimya', 'elektrolit', 'hemogram', 'enflamasyon', 'endokrin', 'koag', 'lipid', 'diger'];
+  const gruplar = {};
+  for (const [key, m] of Object.entries(PARAM_META)) {
+    (gruplar[m.kategori] = gruplar[m.kategori] || []).push({ key, m });
+  }
+  return KATSIRA.filter(k => gruplar[k]).map(k => {
+    const opts = gruplar[k].map(({ key, m }) =>
+      `<option value="${key}">${_labEsc(m.isim)}${m.birim ? ` (${_labEsc(m.birim)})` : ''}</option>`
+    ).join('');
+    return `<optgroup label="${KATAD[k] || k}">${opts}</optgroup>`;
+  }).join('');
+}
+
+function _openYeniLabModal() {
+  const bugunIso = new Date().toISOString().split('T')[0];
+  const ov = document.createElement('div');
+  ov.className = 'modal-overlay';
+  ov.innerHTML = `
+    <div class="modal-box">
+      <div class="modal-header">
+        <span class="modal-title">➕ Yeni Lab Değeri</span>
+        <button class="modal-close" id="ylClose">✕</button>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Parametre</label>
+        <select id="ylParam" class="form-control">${_labParamOptions()}</select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Tarih</label>
+        <input type="date" id="ylTarih" class="form-control" value="${bugunIso}">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Değer <span id="ylBirim" style="color:var(--text-secondary);font-weight:400"></span></label>
+        <input type="number" step="0.01" id="ylDeger" class="form-control" placeholder="0.00">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="ylIptal">İptal</button>
+        <button class="btn btn-primary"   id="ylKaydet">Ekle</button>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(ov);
+  requestAnimationFrame(() => ov.classList.add('open'));
+
+  const sel   = ov.querySelector('#ylParam');
+  const birim = ov.querySelector('#ylBirim');
+  const setBirim = () => { birim.textContent = PARAM_META[sel.value]?.birim ? `(${PARAM_META[sel.value].birim})` : ''; };
+  setBirim();
+  sel.addEventListener('change', setBirim);
+
+  const close = () => { ov.classList.remove('open'); setTimeout(() => ov.remove(), 300); };
+  ov.addEventListener('click', e => { if (e.target === ov) close(); });
+  ov.querySelector('#ylClose').addEventListener('click', close);
+  ov.querySelector('#ylIptal').addEventListener('click', close);
+  ov.querySelector('#ylKaydet').addEventListener('click', async () => {
+    const param = sel.value;
+    const tarih = ov.querySelector('#ylTarih').value;
+    const deger = parseFloat(ov.querySelector('#ylDeger').value);
+    if (!param || !tarih || Number.isNaN(deger)) { showToast('Tüm alanları doldurun', 'error'); return; }
+
+    const btn = ov.querySelector('#ylKaydet');
+    btn.disabled = true; btn.textContent = 'Ekleniyor…';
+    try {
+      await addYeniLabDeger(_hasta(), param, tarih, deger);
+      showToast('Lab değeri eklendi', 'success');
+      close(); // updateHasta → subscribe → _refreshLabDefteri otomatik yeniler
+    } catch (err) {
+      showToast('Ekleme hatası: ' + (err.message || err), 'error');
+      btn.disabled = false; btn.textContent = 'Ekle';
+    }
+  });
+  setTimeout(() => ov.querySelector('#ylDeger')?.focus(), 320);
 }
 
 async function _aiLabTara() {

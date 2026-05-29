@@ -26,7 +26,7 @@ const SYSTEM_PROMPT =
 
 // Parametre metadata'sı — matris renk/kategori/referans için (defter'e yazılır).
 // min/max yoksa o yön sınırsız.
-const PARAM_META = {
+export const PARAM_META = {
   // kardiyo
   BNP:       { isim: 'BNP',           birim: 'pg/mL',   kategori: 'kardiyo',    max: 100 },
   proBNP:    { isim: 'NT-proBNP',     birim: 'pg/mL',   kategori: 'kardiyo',    max: 125 },

@@ -3039,3 +3039,51 @@ body {
   font-style: italic;
 }
 
+/* ========== Lab Defteri AI tarama (v0.4.5 Sprint 3) ========== */
+.lab-tarama-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+.lab-son-tarama {
+  font-size: 12px;
+  color: #6b5640;
+}
+.lab-tarama-progress {
+  background: #fff9f0;
+  border: 1px solid #d4c4a8;
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  font-size: 13px;
+  color: #5a3f1f;
+}
+.lab-tarama-progress small { color: #8b7a5f; }
+.lab-tarama-spin {
+  display: inline-block;
+  animation: labdef-spin 1.4s linear infinite;
+}
+@keyframes labdef-spin { to { transform: rotate(360deg); } }
+.lab-tarama-akan {
+  margin-top: 8px;
+  font-family: 'Monaco', 'Consolas', monospace;
+  font-size: 11px;
+  color: #8b7a5f;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 48px;
+  overflow: hidden;
+}
+.labdef-bos {
+  text-align: center;
+  padding: 40px 20px;
+  color: #6b5640;
+  background: #fef9f0;
+  border: 1px dashed #d4c4a8;
+  border-radius: 12px;
+  font-size: 14px;
+  line-height: 1.6;
+}
+

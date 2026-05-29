@@ -13,8 +13,9 @@ import { openSkorSecimModal }  from '../components/skorSecimModal.js';
 import { getSkor, SKORLAR, KATEGORI_LABEL } from '../skor/index.js';
 import { confirm }         from '../components/modal.js';
 import { showToast }       from '../components/toast.js';
-import { formatTarih }     from '../utils.js';
+import { formatTarih, gunFarki, bugun } from '../utils.js';
 import { renderAiPanel, attachAiListeners, resetAi, refreshAiGecmis, refreshAiDosyaInfo } from '../components/aiSorgu.js';
+import { topluLabTara } from '../labDefteri/aiTarayici.js';
 
 const SEMPTOM_FIELDS = [
   { key: 'sikayetler', label: 'Başvuru Şikayetleri', icon: '📋' },
@@ -70,6 +71,7 @@ function _mount() {
       _refreshHeader();
       _refreshOzetTab();
       _refreshMetinTab('hdPanelSemptomlar', SEMPTOM_FIELDS);
+      _refreshLabDefteri();
     }),
     subscribe('tanilar',   () => _refreshSection('hdTanilarList',  _renderTanilarList)),
     subscribe('ilaclar',   () => _refreshSection('hdIlaclarList',  _renderIlaclarList)),
@@ -274,89 +276,181 @@ function _renderTetkiklerPanel() {
       </div>
 
       <div class="alt-sekme-icerik" data-alt-icerik="lab" hidden>
-        ${_renderLabDefteriDemo()}
+        ${_renderLabDefteriIcerik()}
       </div>
     </div>
   `;
 }
 
-// Sprint 2: STATİK (sahte veri) Lab Defteri matris önizlemesi — backend/veri YOK.
-// Tüm değerler temsilîdir; gerçek tetkik verisi sonraki sprint'te bağlanacak.
-function _renderLabDefteriDemo() {
+// Sprint 3: AI ile gerçek tarama + gerçek veriden matris (hasta.labDefteri).
+function _renderLabDefteriIcerik() {
+  const defter = _hasta()?.labDefteri;
+  const dolu = defter?.parametreler && Object.keys(defter.parametreler).length > 0;
+  const sonGun = defter?.sonGuncelleme
+    ? new Date(defter.sonGuncelleme).toLocaleString('tr-TR',
+        { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : null;
+
   return `
-    <div class="labdef-demo-uyari">
-      🔸 <strong>Örnek görünüm</strong> — gerçek tetkik verisi henüz bağlı değil.
-      Aşağıdaki değerler yalnızca tasarım önizlemesidir.
+    <div class="lab-tarama-bar">
+      <button class="btn btn-primary" data-ai-tara
+              style="min-height:36px;padding:8px 16px;font-size:13px">🤖 AI ile Tetkikleri Tara</button>
+      <span class="lab-son-tarama">${sonGun ? `Son tarama: ${sonGun}` : 'Henüz taranmadı'}</span>
     </div>
+    <div class="lab-tarama-progress" data-lab-progress hidden>
+      <span class="lab-tarama-spin">⏳</span> AI tetkikleri okuyor… <small>(30-60 sn sürebilir)</small>
+      <div class="lab-tarama-akan" data-lab-progress-text></div>
+    </div>
+    ${dolu
+      ? _renderLabMatris(defter)
+      : `<div class="labdef-bos">📭 Henüz lab defteri yok. PDF/görüntü tetkiklerinden lab değerlerini çıkarmak için yukarıdaki butona tıkla.</div>`}
+  `;
+}
+
+function _renderLabMatris(defter) {
+  const params = defter.parametreler || {};
+  const tarihSet = new Set();
+  Object.values(params).forEach(p => (p.olcumler || []).forEach(o => o.tarih && tarihSet.add(o.tarih)));
+  const tarihler = [...tarihSet].sort((a, b) => new Date(b) - new Date(a));
+  if (!tarihler.length) return `<div class="labdef-bos">Ölçüm bulunamadı.</div>`;
+
+  const KATSIRA = ['kardiyo', 'biyokimya', 'elektrolit', 'hemogram', 'enflamasyon', 'endokrin', 'koag', 'lipid', 'diger'];
+  const KATAD = {
+    kardiyo: '🩸 Kardiyovasküler', biyokimya: '🧪 Biyokimya', elektrolit: '🫧 Elektrolit',
+    hemogram: '🩸 Hemogram', enflamasyon: '🦠 Enflamasyon', endokrin: '🧬 Endokrin',
+    koag: '🩺 Koagülasyon', lipid: '💧 Lipid', diger: '📁 Diğer'
+  };
+
+  const rows = Object.entries(params).map(([key, p]) => ({
+    isim: p.isim || key, birim: p.birim || '', referans: p.referans || null,
+    kategori: p.kategori || 'diger',
+    olcumler: (p.olcumler || []).slice().sort((a, b) => new Date(b.tarih) - new Date(a.tarih))
+  }));
+
+  const thDates = tarihler.map(t => `<th>${_labKisaTarih(t)}</th>`).join('');
+  const gruplar = KATSIRA.map(k => ({ k, rows: rows.filter(r => r.kategori === k) })).filter(g => g.rows.length);
+
+  const govde = gruplar.map(g => {
+    const head = `<tr class="labdef-kat-row"><td colspan="${tarihler.length + 3}">${KATAD[g.k] || g.k}</td></tr>`;
+    const satir = g.rows.map(r => {
+      const cells = tarihler.map(t => {
+        const o = r.olcumler.find(x => x.tarih === t);
+        if (!o || o.deger == null) return `<td class="labdef-deger">–</td>`;
+        const cls = _labDurum(o.deger, r.referans);
+        return `<td class="labdef-deger ${cls}">${_labFmt(o.deger)}</td>`;
+      }).join('');
+      const tr = _labTrend(r.olcumler);
+      const ref = _labRefMetni(r.referans, r.birim);
+      return `<tr><td class="labdef-param">${_labEsc(r.isim)}</td>${cells}<td class="labdef-trend ${tr.cls}">${tr.sym}</td><td class="labdef-ref">${_labEsc(ref)}</td></tr>`;
+    }).join('');
+    return head + satir;
+  }).join('');
+
+  return `
     <div class="labdef-matris-wrap">
       <table class="labdef-matris">
         <thead>
-          <tr>
-            <th class="labdef-param-col">Parametre</th>
-            <th>06.05</th>
-            <th>14.04</th>
-            <th>28.03</th>
-            <th>Trend</th>
-            <th class="labdef-ref-col">Referans</th>
-          </tr>
+          <tr><th class="labdef-param-col">Parametre</th>${thDates}<th>Trend</th><th class="labdef-ref-col">Referans</th></tr>
         </thead>
-        <tbody>
-          <tr class="labdef-kat-row"><td colspan="6">🩸 Kardiyovasküler</td></tr>
-          <tr>
-            <td class="labdef-param">BNP</td>
-            <td class="labdef-deger labdef-yuksek">817</td>
-            <td class="labdef-deger">–</td>
-            <td class="labdef-deger">–</td>
-            <td class="labdef-trend labdef-trend-yeni">Yeni</td>
-            <td class="labdef-ref">&lt;100 pg/mL</td>
-          </tr>
-          <tr>
-            <td class="labdef-param">Troponin I</td>
-            <td class="labdef-deger labdef-yuksek">0.08</td>
-            <td class="labdef-deger">0.02</td>
-            <td class="labdef-deger">–</td>
-            <td class="labdef-trend labdef-trend-up">↑</td>
-            <td class="labdef-ref">&lt;0.04 ng/mL</td>
-          </tr>
-
-          <tr class="labdef-kat-row"><td colspan="6">🧪 Biyokimya</td></tr>
-          <tr>
-            <td class="labdef-param">Kreatinin</td>
-            <td class="labdef-deger">0.56</td>
-            <td class="labdef-deger">0.58</td>
-            <td class="labdef-deger">0.62</td>
-            <td class="labdef-trend labdef-trend-down">↓</td>
-            <td class="labdef-ref">0.7–1.2 mg/dL</td>
-          </tr>
-          <tr>
-            <td class="labdef-param">Sodyum</td>
-            <td class="labdef-deger">142</td>
-            <td class="labdef-deger">140</td>
-            <td class="labdef-deger">141</td>
-            <td class="labdef-trend labdef-trend-stable">→</td>
-            <td class="labdef-ref">136–145 mEq/L</td>
-          </tr>
-          <tr>
-            <td class="labdef-param">CRP</td>
-            <td class="labdef-deger labdef-yuksek-belirgin">111.6</td>
-            <td class="labdef-deger labdef-yuksek">45</td>
-            <td class="labdef-deger">5</td>
-            <td class="labdef-trend labdef-trend-up">↑</td>
-            <td class="labdef-ref">&lt;5 mg/L</td>
-          </tr>
-          <tr>
-            <td class="labdef-param">Albümin</td>
-            <td class="labdef-deger">–</td>
-            <td class="labdef-deger labdef-dusuk">2.9</td>
-            <td class="labdef-deger">–</td>
-            <td class="labdef-trend labdef-trend-eski">Eski</td>
-            <td class="labdef-ref">3.5–5.0 g/dL</td>
-          </tr>
-        </tbody>
+        <tbody>${govde}</tbody>
       </table>
     </div>
-    <div class="labdef-demo-not">Sonraki sprint: tetkiklerden gerçek lab değerleri + AI ile otomatik çıkarma.</div>
   `;
+}
+
+function _labDurum(deger, ref) {
+  if (deger == null || !ref) return '';
+  const d = +deger;
+  if (Number.isNaN(d)) return '';
+  if (ref.max != null && d > ref.max) return d > ref.max * 2 ? 'labdef-yuksek-belirgin' : 'labdef-yuksek';
+  if (ref.min != null && d < ref.min) return 'labdef-dusuk';
+  return '';
+}
+
+function _labTrend(olc) {
+  if (!olc || olc.length < 2) return { sym: 'Yeni', cls: 'labdef-trend-yeni' };
+  let fark = null;
+  try { fark = gunFarki(bugun(), olc[0].tarih); } catch {}
+  if (fark != null && fark > 90) return { sym: 'Eski', cls: 'labdef-trend-eski' };
+  const y = +olc[0].deger, e = +olc[1].deger;
+  if (!Number.isFinite(y) || !Number.isFinite(e) || e === 0) return { sym: '→', cls: 'labdef-trend-stable' };
+  const pct = Math.abs(y - e) / Math.abs(e) * 100;
+  if (pct < 5) return { sym: '→', cls: 'labdef-trend-stable' };
+  const up = y > e;
+  if (pct <= 15) return { sym: up ? '↑' : '↓', cls: up ? 'labdef-trend-up' : 'labdef-trend-down' };
+  return { sym: up ? '⇈' : '⇊', cls: up ? 'labdef-trend-up' : 'labdef-trend-down' };
+}
+
+function _labRefMetni(ref, birim) {
+  if (!ref) return birim || '';
+  const b = birim ? ` ${birim}` : '';
+  if (ref.min != null && ref.max != null) return `${ref.min}–${ref.max}${b}`;
+  if (ref.max != null) return `<${ref.max}${b}`;
+  if (ref.min != null) return `>${ref.min}${b}`;
+  return birim || '';
+}
+
+function _labFmt(n) {
+  const v = +n;
+  if (!Number.isFinite(v)) return _labEsc(String(n));
+  return Number.isInteger(v) ? String(v) : String(+v.toFixed(2));
+}
+
+function _labKisaTarih(iso) {
+  if (!iso) return '';
+  const d = new Date(iso + 'T00:00:00');
+  if (Number.isNaN(d.getTime())) return iso;
+  return `${String(d.getDate()).padStart(2, '0')}.${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function _labEsc(s) {
+  return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Lab Defteri içeriğini yeniden render et + AI buton listener'ını yeniden bağla.
+// hastalar subscribe (tarama sonrası updateHasta) ve hata durumunda çağrılır.
+function _refreshLabDefteri() {
+  const el = _overlay?.querySelector('[data-alt-icerik="lab"]');
+  if (!el) return;
+  el.innerHTML = _renderLabDefteriIcerik();
+  _attachLabDefteriListeners();
+}
+
+function _attachLabDefteriListeners() {
+  _overlay?.querySelector('[data-ai-tara]')?.addEventListener('click', _aiLabTara);
+}
+
+async function _aiLabTara() {
+  const tetkikler = _tetkikler();
+  const btn      = _overlay.querySelector('[data-ai-tara]');
+  const prog     = _overlay.querySelector('[data-lab-progress]');
+  const progText = _overlay.querySelector('[data-lab-progress-text]');
+
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ Taranıyor…'; }
+  if (prog) prog.hidden = false;
+
+  try {
+    const sonuc = await topluLabTara(_hasta(), tetkikler, {
+      onProgress: (full) => { if (progText) progText.textContent = full.slice(-140); }
+    });
+
+    if (sonuc.error) {
+      showToast(sonuc.error, 'error');
+      _refreshLabDefteri();
+      return;
+    }
+
+    await updateHasta(_hastaId, { labDefteri: sonuc.labDefteri });
+    const m = sonuc.meta;
+    const paramSayisi = Object.keys(sonuc.labDefteri.parametreler).length;
+    let msg = `✅ ${m.taranansayi} tetkik tarandı · ${paramSayisi} parametre`;
+    if (m.atilansayi > 0) msg += ` · ${m.atilansayi} tetkik 30 MB'tan atıldı`;
+    showToast(msg, 'success');
+    // updateHasta → hastalar subscribe → _refreshLabDefteri (matris + buton resetlenir)
+  } catch (e) {
+    showToast('Tarama hatası: ' + (e.error || e.message || e), 'error');
+    _refreshLabDefteri();
+  }
 }
 
 // Tetkikler sekmesi alt-tab geçişi (Dosyalar ↔ Lab Defteri) — Sprint 1, sadece UI.
@@ -652,6 +746,7 @@ function _attachListeners() {
 
   // Tetkikler alt-sekmeleri (Dosyalar / Lab Defteri)
   _initTetkikAltSekmeler();
+  _attachLabDefteriListeners();
 }
 
 function _handleDelegated(e) {

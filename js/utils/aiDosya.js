@@ -8,9 +8,13 @@
 const STORAGE_PROXY_URL = 'https://muddy-cherry-1712.drahmetboyoglu.workers.dev/storage-proxy';
 
 const MAX_PDF_MB   = 32;   // Anthropic limit'i
-const MAX_IMAGE_MB = 5;
+const MAX_IMAGE_MB = 20;   // resize öncesi güvenlik üst sınırı (gönderim öncesi canvas ile küçültülür)
 const MAX_BYTES_PDF   = MAX_PDF_MB   * 1024 * 1024;
 const MAX_BYTES_IMAGE = MAX_IMAGE_MB * 1024 * 1024;
+
+// Görüntü gönderim öncesi yeniden boyutlandırma (Anthropic önerisi)
+const IMG_MAX_EDGE    = 1568;  // uzun kenar px
+const IMG_JPEG_KALITE = 0.85;
 
 const AUTO_LIMIT = 5; // Default'ta son N tetkik dahil
 
@@ -65,6 +69,51 @@ async function _fetchDosyaBase64(dosya) {
     console.error('[fetchAsBase64] Worker proxy HATA:', dosya?.ad, e?.message);
     return null;
   }
+}
+
+/**
+ * Görüntü base64'ünü canvas ile küçültüp JPEG'e çevirir.
+ * Uzun kenar IMG_MAX_EDGE'i aşmıyorsa yine de JPEG'e re-encode edilir (boyut düşer).
+ * Hata olursa orijinal base64 + mediaType döner (best-effort).
+ * @returns {Promise<{data, mediaType}>}
+ */
+function _resizeImageBase64(base64, mediaType) {
+  return new Promise((resolve) => {
+    try {
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const { width, height } = img;
+          if (!width || !height) return resolve({ data: base64, mediaType });
+          const uzun  = Math.max(width, height);
+          const scale = uzun > IMG_MAX_EDGE ? IMG_MAX_EDGE / uzun : 1;
+          const w = Math.round(width * scale);
+          const h = Math.round(height * scale);
+
+          const canvas = document.createElement('canvas');
+          canvas.width = w;
+          canvas.height = h;
+          const ctx = canvas.getContext('2d');
+          // PNG şeffaflığı JPEG'de siyah olmasın → beyaz zemin
+          ctx.fillStyle = '#fff';
+          ctx.fillRect(0, 0, w, h);
+          ctx.drawImage(img, 0, 0, w, h);
+
+          const dataUrl = canvas.toDataURL('image/jpeg', IMG_JPEG_KALITE);
+          const out = dataUrl.split(',')[1];
+          if (!out) return resolve({ data: base64, mediaType });
+          resolve({ data: out, mediaType: 'image/jpeg' });
+        } catch (e) {
+          console.warn('[resizeImage] canvas hatası, orijinal gönderiliyor:', e?.message);
+          resolve({ data: base64, mediaType });
+        }
+      };
+      img.onerror = () => resolve({ data: base64, mediaType });
+      img.src = `data:${mediaType};base64,${base64}`;
+    } catch {
+      resolve({ data: base64, mediaType });
+    }
+  });
 }
 
 // Tetkikleri tarihe göre (yeni → eski) sırala
@@ -188,10 +237,20 @@ export async function gatherTetkikDosyalari(tetkikler, secilenTetkikIdleri) {
       try {
         const base64 = await _fetchDosyaBase64(d);
         if (!base64) continue;
+
+        // Görüntüleri gönderim öncesi küçült (uzun kenar 1568px, JPEG q0.85)
+        let data = base64;
+        let mediaType = mi.mediaType;
+        if (mi.kind === 'image') {
+          const r = await _resizeImageBase64(base64, mi.mediaType);
+          data = r.data;
+          mediaType = r.mediaType;
+        }
+
         out.push({
           kind:         mi.kind,
-          mediaType:    mi.mediaType,
-          data:         base64,
+          mediaType,
+          data,
           ad:           d.ad,
           tetkikId:     t.id,
           tetkikTarih:  t.tarih,

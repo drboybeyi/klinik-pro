@@ -2123,6 +2123,16 @@ body {
   font-size: 12px;
   line-height: 1.4;
 }
+.tetkik-ozet-bilgi {
+  margin-top: 6px;
+  padding: 6px 8px;
+  background: rgba(139, 111, 71, 0.07);
+  border-left: 3px solid var(--accent);
+  border-radius: 3px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.4;
+}
 
 /* ============== AI v0.3.5.1 — Streaming durumu ============== */
 

@@ -388,6 +388,12 @@ function _renderTetkikOzet(hastaId) {
 
   let html = `<span class="ai-dosya-info-ok">📎 ${parts.join(' + ')} eklenecek · ${usdTxt} ek</span>`;
 
+  if (meta.imageCount > 0) {
+    html += `<div class="tetkik-ozet-bilgi">ℹ️ Görüntüler gönderim öncesi otomatik küçültülür (uzun kenar 1568px).</div>`;
+  }
+  if (meta.atlananBoyut > 0) {
+    html += `<div class="tetkik-ozet-uyari">⚠️ ${meta.atlananBoyut} görüntü ${20} MB sınırını aştığı için atlandı.</div>`;
+  }
   if (isHaiku && meta.pdfCount > 0) {
     html += `<div class="tetkik-ozet-uyari">⚠️ Haiku 4.5 PDF desteklemiyor. ${meta.pdfCount} PDF atlanacak, sadece görüntüler gönderilecek.</div>`;
   }

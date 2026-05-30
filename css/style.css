@@ -85,12 +85,13 @@ body {
 .header {
   position: fixed;
   top: 0; left: 0; right: 0;
-  height: var(--header-h);
+  /* iOS standalone PWA: durum çubuğu/çentik altına inmesin */
+  height: calc(var(--header-h) + env(safe-area-inset-top, 0px));
+  padding: env(safe-area-inset-top, 0px) 16px 0;
   background: var(--accent);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 16px;
   z-index: 100;
   box-shadow: 0 2px 8px rgba(61, 40, 23, 0.2);
 }
@@ -998,11 +999,12 @@ body {
 .hasta-detay-overlay.open { transform: translateX(0); }
 
 .hasta-detay-header {
-  height: var(--header-h);
+  /* iOS standalone PWA: geri (←) butonu durum çubuğu altında kalmasın */
+  height: calc(var(--header-h) + env(safe-area-inset-top, 0px));
+  padding: env(safe-area-inset-top, 0px) 12px 0;
   background: var(--accent);
   display: flex;
   align-items: center;
-  padding: 0 12px;
   gap: 10px;
   flex-shrink: 0;
   box-shadow: 0 2px 8px rgba(61,40,23,0.2);

@@ -15,6 +15,7 @@ import { confirm }         from '../components/modal.js';
 import { showToast }       from '../components/toast.js';
 import { formatTarih, gunFarki, bugun } from '../utils.js';
 import { renderAiPanel, attachAiListeners, resetAi, refreshAiGecmis, refreshAiDosyaInfo } from '../components/aiSorgu.js';
+import { renderTartismaPanel, attachTartismaListeners, resetTartisma } from '../components/vakaTartismasi.js';
 import { topluLabTara, PARAM_META } from '../labDefteri/aiTarayici.js';
 import { updateLabDeger, deleteLabDeger, addYeniLabDeger } from '../labDefteri/labDefteriDb.js';
 
@@ -94,6 +95,7 @@ function _unmount() {
   _overlay?.remove();
   _overlay = null;
   resetAi();
+  resetTartisma();
 }
 
 function _close() {
@@ -148,6 +150,7 @@ function _buildAll() {
       <div class="top-tab ${_aktifTab==='skorlar'    ? 'active':''}" data-tab="skorlar">Skorlar</div>
       <div class="top-tab ${_aktifTab==='notlar'     ? 'active':''}" data-tab="notlar">Notlar</div>
       <div class="top-tab ${_aktifTab==='ai'         ? 'active':''}" data-tab="ai">AI</div>
+      <div class="top-tab ${_aktifTab==='tartisma'   ? 'active':''}" data-tab="tartisma">💬 Tartışma</div>
     </div>
 
     <div class="hasta-detay-body">
@@ -157,11 +160,13 @@ function _buildAll() {
       <div id="hdPanelSkorlar"    style="display:${_aktifTab==='skorlar'    ?'block':'none'}">${_renderSkorlarPanel()}</div>
       <div id="hdPanelNotlar"     style="display:${_aktifTab==='notlar'     ?'block':'none'}">${_renderNotlarPanel()}</div>
       <div id="hdPanelAi"         style="display:${_aktifTab==='ai'         ?'block':'none'}">${renderAiPanel(_hastaId)}</div>
+      <div id="hdPanelTartisma"   style="display:${_aktifTab==='tartisma'   ?'block':'none'}">${renderTartismaPanel(_hastaId)}</div>
     </div>
   `;
 
   _attachListeners();
   if (_aktifTab === 'ai') attachAiListeners(_hastaId);
+  if (_aktifTab === 'tartisma') attachTartismaListeners(_hastaId);
 }
 
 // --- Tab panels ---
@@ -1008,7 +1013,7 @@ function _switchTab(tab) {
   _aktifTab = tab;
   _overlay.querySelectorAll('.top-tab').forEach(t =>
     t.classList.toggle('active', t.dataset.tab === tab));
-  ['ozet', 'semptomlar', 'tetkikler', 'skorlar', 'notlar', 'ai'].forEach(name => {
+  ['ozet', 'semptomlar', 'tetkikler', 'skorlar', 'notlar', 'ai', 'tartisma'].forEach(name => {
     const panel = document.getElementById(`hdPanel${_capitalize(name)}`);
     if (panel) panel.style.display = name === tab ? 'block' : 'none';
   });
@@ -1018,6 +1023,7 @@ function _switchTab(tab) {
   if (tab === 'tetkikler') _attachTetkiklerListeners();
   if (tab === 'skorlar')   _attachSkorlarListeners();
   if (tab === 'ai')        attachAiListeners(_hastaId);
+  if (tab === 'tartisma')  attachTartismaListeners(_hastaId);
 }
 
 function _capitalize(s) { return s.charAt(0).toUpperCase() + s.slice(1); }

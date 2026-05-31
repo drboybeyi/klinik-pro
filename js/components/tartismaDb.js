@@ -55,6 +55,17 @@ export async function deleteTartisma(tartismaId) {
 }
 
 /**
+ * Bir tartışmadan verilen mesaj key'lerini sil (çift: soru + yanıt).
+ * @param {string[]} keys — silinecek mesaj push-key'leri (1 veya 2)
+ */
+export async function deleteMesajCifti(tartismaId, keys) {
+  for (const k of (keys || [])) {
+    if (k) await remove(_ref(`tartismalar/${tartismaId}/mesajlar/${k}`));
+  }
+  await update(_ref(`tartismalar/${tartismaId}`), { sonGuncelleme: new Date().toISOString() });
+}
+
+/**
  * Bir hastanın tartışmaları (hastaId=null → genel sohbetler).
  * En yeni → eski (sonGuncelleme'ye göre).
  */
@@ -72,7 +83,8 @@ export function getTartisma(tartismaId) {
   const all = getState('tartismalar') || {};
   const t = all[tartismaId];
   if (!t) return null;
-  const mesajlarDizi = Object.values(t.mesajlar || {})
+  const mesajlarDizi = Object.entries(t.mesajlar || {})
+    .map(([key, m]) => ({ key, ...m }))
     .sort((a, b) => (a.zaman || '').localeCompare(b.zaman || ''));
   return { ...t, mesajlarDizi };
 }

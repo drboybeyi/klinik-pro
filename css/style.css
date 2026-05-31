@@ -2174,12 +2174,34 @@ body {
   padding: 4px 2px 12px;
 }
 .tartisma-balon {
+  position: relative;
   max-width: 85%;
   padding: 10px 14px;
   border-radius: 14px;
   font-size: 14px;
   line-height: 1.55;
   word-wrap: break-word;
+}
+/* Mesaj silme — hover (masaüstü) / tap (mobil) ile görünür */
+.tartisma-msg-del {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0;
+  padding: 2px;
+  transition: opacity 120ms;
+  -webkit-tap-highlight-color: transparent;
+}
+.tartisma-balon:hover .tartisma-msg-del,
+.tartisma-balon:focus-within .tartisma-msg-del { opacity: 0.75; }
+.tartisma-msg-del:hover { opacity: 1; }
+@media (hover: none) {
+  .tartisma-msg-del { opacity: 0.55; } /* dokunmatik: hep görünür */
 }
 .tartisma-balon-user {
   align-self: flex-end;
@@ -2277,22 +2299,51 @@ body {
   text-align: center;
   padding: 8px;
 }
+.tartisma-gecmis-satir {
+  display: flex;
+  align-items: stretch;
+  gap: 4px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  transition: border-color 120ms, background 120ms;
+}
+.tartisma-gecmis-satir:hover { border-color: var(--accent); background: #fffbf5; }
+.tartisma-gecmis-satir.tartisma-gecmis-aktif { border-color: var(--accent); background: #fffbf5; }
 .tartisma-gecmis-kart {
+  flex: 1;
+  min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
   text-align: left;
   padding: 8px 10px;
-  background: #fff;
-  border: 1px solid var(--border);
+  background: transparent;
+  border: none;
   border-radius: 6px;
   cursor: pointer;
-  transition: border-color 120ms, background 120ms;
 }
-.tartisma-gecmis-kart:hover { border-color: var(--accent); background: #fffbf5; }
-.tartisma-gecmis-aktif { border-color: var(--accent); background: #fffbf5; }
-.tartisma-gecmis-baslik { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.tartisma-gecmis-baslik {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .tartisma-gecmis-tarih { font-size: 11px; color: var(--text-secondary); }
+.tartisma-gecmis-del {
+  flex-shrink: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-size: 13px;
+  padding: 0 10px;
+  color: var(--text-secondary);
+  border-radius: 0 6px 6px 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.tartisma-gecmis-del:hover { background: #fde8e8; color: var(--danger); }
 
 /* ============== AI v0.3.5.1 — Streaming durumu ============== */
 

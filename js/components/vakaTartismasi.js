@@ -6,10 +6,14 @@
 
 import { streamMessages } from '../utils/aiStream.js';
 import { showToast } from './toast.js';
+import { confirm } from './modal.js';
 import { getState } from '../state.js';
 import { formatTarih } from '../labDefteri/labDefteriHelper.js';
 import { gatherTetkikDosyalari } from '../utils/aiDosya.js';
-import { createTartisma, addMesaj, getTartismalar, getTartisma } from './tartismaDb.js';
+import {
+  createTartisma, addMesaj, getTartismalar, getTartisma,
+  deleteTartisma, deleteMesajCifti
+} from './tartismaDb.js';
 
 const MODEL = 'claude-sonnet-4-5-20250929';
 
@@ -178,10 +182,13 @@ function _renderGecmisListe() {
       : '';
     const aktif = t.id === _aktifTartismaId ? ' tartisma-gecmis-aktif' : '';
     return `
-      <button class="tartisma-gecmis-kart${aktif}" data-tartisma-id="${t.id}" type="button">
-        <span class="tartisma-gecmis-baslik">${_esc(t.baslik || 'Tartışma')}</span>
-        <span class="tartisma-gecmis-tarih">${tarih}</span>
-      </button>
+      <div class="tartisma-gecmis-satir${aktif}">
+        <button class="tartisma-gecmis-kart" data-tartisma-id="${t.id}" type="button">
+          <span class="tartisma-gecmis-baslik">${_esc(t.baslik || 'Tartışma')}</span>
+          <span class="tartisma-gecmis-tarih">${tarih}</span>
+        </button>
+        <button class="tartisma-gecmis-del" data-tartisma-del="${t.id}" title="Tartışmayı sil" type="button">🗑️</button>
+      </div>
     `;
   }).join('');
 }
@@ -197,12 +204,16 @@ function _renderMesajlar() {
     `;
   }
   return _mesajlar.map(m => {
+    // Silme butonu yalnız kayıtlı (key'li) ve stream bitmiş mesajlarda
+    const delBtn = (m.key && !m.streaming)
+      ? `<button class="tartisma-msg-del" data-msg-del="${m.key}" title="Soru-yanıtı sil">🗑️</button>`
+      : '';
     if (m.role === 'user') {
-      return `<div class="tartisma-balon tartisma-balon-user">${_esc(m.content)}</div>`;
+      return `<div class="tartisma-balon tartisma-balon-user" data-msg-key="${m.key || ''}">${_esc(m.content)}${delBtn}</div>`;
     }
     const akan = m.streaming ? '<span class="tartisma-akan-dot"></span>' : '';
-    return `<div class="tartisma-balon tartisma-balon-ai">
-      <div class="markdown-body">${_renderMd(m.content)}</div>${akan}
+    return `<div class="tartisma-balon tartisma-balon-ai" data-msg-key="${m.key || ''}">
+      <div class="markdown-body">${_renderMd(m.content)}</div>${akan}${delBtn}
     </div>`;
   }).join('');
 }
@@ -237,6 +248,12 @@ export function attachTartismaListeners(hastaId) {
 
   document.getElementById('tartismaYeniBtn')?.addEventListener('click', () => _yeniTartisma());
 
+  // Mesaj balonu silme — delegated (container stabil, balonlar re-render olur)
+  document.getElementById('tartismaMesajlar')?.addEventListener('click', e => {
+    const del = e.target.closest('[data-msg-del]');
+    if (del) { e.stopPropagation(); _silMesajCifti(del.dataset.msgDel); }
+  });
+
   _attachGecmisKartListeners();
 }
 
@@ -249,6 +266,12 @@ function _attachGecmisKartListeners() {
       _refreshGecmis();
     });
   });
+  document.querySelectorAll('[data-tartisma-del]').forEach(btn => {
+    btn.addEventListener('click', e => {
+      e.stopPropagation();
+      _silTartisma(btn.dataset.tartismaDel);
+    });
+  });
 }
 
 // --- Geçmiş yükleme ---
@@ -258,7 +281,8 @@ function _loadTartisma(id) {
   if (!t) return;
   _aktifTartismaId = id;
   _ilkTurnDosyaGonderildi = true; // yüklenen sohbette dosya yeniden gönderilmez (sadece metin geçmişi)
-  _mesajlar = t.mesajlarDizi.map(m => ({ role: m.role, content: m.content }));
+  // key UI silme için; _apiMesajlar key taşımaz (API'ye gitmez)
+  _mesajlar = t.mesajlarDizi.map(m => ({ key: m.key, role: m.role, content: m.content }));
   _apiMesajlar = t.mesajlarDizi.map(m => ({ role: m.role, content: m.content }));
   _kayitDurum = '✓ kaydedildi';
   _refreshMesajlar(true);
@@ -277,6 +301,60 @@ function _yeniTartisma() {
   _refreshGecmis();
   _refreshKayitDurum();
   document.getElementById('tartismaInput')?.focus();
+}
+
+// --- Silme ---
+
+// Soru+yanıt çiftini sil. _mesajlar ve _apiMesajlar pozisyonel hizalı kurulur
+// (load + gönder ikisinde de) → aynı index'leri ikisinden de çıkararak çok-turn
+// senkronu garanti edilir. RTDB'den de key ile kalıcı silinir.
+async function _silMesajCifti(key) {
+  if (_streaming) { showToast('Önce mevcut yanıtı bitirin veya durdurun', 'warning'); return; }
+  const idx = _mesajlar.findIndex(m => m.key === key);
+  if (idx < 0) return;
+
+  // Çifti belirle: user→sonraki assistant; assistant→önceki user
+  let indices;
+  if (_mesajlar[idx].role === 'user') {
+    indices = (_mesajlar[idx + 1]?.role === 'assistant') ? [idx, idx + 1] : [idx];
+  } else {
+    indices = (_mesajlar[idx - 1]?.role === 'user') ? [idx - 1, idx] : [idx];
+  }
+
+  const ok = await confirm('Bu soru ve yanıtı silinecek. Emin misiniz?');
+  if (!ok) return;
+
+  const keys = indices.map(i => _mesajlar[i]?.key).filter(Boolean);
+
+  // Lokal dizilerden çıkar (yüksek index'ten başla — kayma olmasın)
+  for (const i of [...indices].sort((a, b) => b - a)) {
+    _mesajlar.splice(i, 1);
+    _apiMesajlar.splice(i, 1);
+  }
+  _refreshMesajlar(true);
+
+  // RTDB'den kalıcı sil
+  try {
+    if (_aktifTartismaId && keys.length) await deleteMesajCifti(_aktifTartismaId, keys);
+    showToast('Soru-yanıt silindi', 'info');
+  } catch (e) {
+    showToast('Silme hatası: ' + (e.message || e), 'error');
+  }
+}
+
+async function _silTartisma(id) {
+  if (_streaming) { showToast('Önce mevcut yanıtı bitirin veya durdurun', 'warning'); return; }
+  const ok = await confirm('Bu tartışma tamamen silinecek. Emin misiniz?');
+  if (!ok) return;
+  try {
+    await deleteTartisma(id);
+    // Açık tartışma silindiyse temiz başlangıca dön
+    if (id === _aktifTartismaId) _yeniTartisma();
+    else _refreshGecmis();
+    showToast('Tartışma silindi', 'info');
+  } catch (e) {
+    showToast('Silme hatası: ' + (e.message || e), 'error');
+  }
 }
 
 // --- Gönder / Stream (çok-turn) ---
@@ -324,7 +402,8 @@ async function _gonder() {
   if (!soru) { showToast('Soru boş olamaz', 'error'); return; }
 
   // UI balonları
-  _mesajlar.push({ role: 'user', content: soru });
+  const userMsg = { role: 'user', content: soru };
+  _mesajlar.push(userMsg);
   const asistan = { role: 'assistant', content: '', streaming: true };
   _mesajlar.push(asistan);
   if (ta) ta.value = '';
@@ -340,7 +419,7 @@ async function _gonder() {
     if (!_aktifTartismaId) {
       _aktifTartismaId = await createTartisma(_hastaId, hasta?.ad || null, _baslikUret(soru));
     }
-    await addMesaj(_aktifTartismaId, 'user', soru);
+    userMsg.key = await addMesaj(_aktifTartismaId, 'user', soru);
     _kayitDurum = '✓ kaydedildi';
     _refreshKayitDurum();
     _refreshGecmis();
@@ -397,10 +476,11 @@ async function _gonder() {
         // RTDB: asistan yanıtını kaydet
         if (_aktifTartismaId && yanit) {
           try {
-            await addMesaj(_aktifTartismaId, 'assistant', yanit);
+            asistan.key = await addMesaj(_aktifTartismaId, 'assistant', yanit);
             _kayitDurum = '✓ kaydedildi';
             _refreshKayitDurum();
             _refreshGecmis();
+            _refreshMesajlar(true); // 🗑️ butonu key ile görünsün
           } catch (e) {
             console.warn('[vakaTartismasi] yanıt kaydı hatası:', e?.message);
           }

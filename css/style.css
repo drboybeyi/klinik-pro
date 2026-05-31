@@ -1070,10 +1070,17 @@ body {
   top: 0;
   z-index: 10;
   flex-shrink: 0;
+  /* Mobilde sekmeler sığmazsa yatay kaydır (taşma yerine scroll) */
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;       /* Firefox */
 }
+.top-tabs::-webkit-scrollbar { display: none; } /* Chrome/Safari */
 
 .top-tab {
-  flex: 1;
+  /* geniş ekranda eşit dağıl (grow), dar ekranda küçülme → scroll oluşsun (shrink:0) */
+  flex: 1 0 auto;
+  white-space: nowrap;
   padding: 12px 8px;
   text-align: center;
   font-size: 14px;
@@ -2216,10 +2223,13 @@ body {
 .tartisma-input {
   flex: 1;
   resize: vertical;
-  min-height: 44px;
-  max-height: 160px;
+  width: 100%;
+  min-height: 80px;
+  max-height: 240px;
+  padding: 12px;
+  font-size: 15px;
   font-family: inherit;
-  line-height: 1.4;
+  line-height: 1.5;
 }
 .tartisma-gonder {
   min-height: 44px;
@@ -2334,8 +2344,8 @@ body {
 .seviye-bg-izlem  { background: #fff8ee; border: 1px solid #f0d8a3; }
 .seviye-bg-stabil { background: var(--lab-normal-bg); border: 1px solid #c3dab1; }
 
-/* Top tabs — 6 sekmeye uyum (dar mobilde) */
-.top-tab { padding: 12px 6px; font-size: 13px; }
+/* Top tabs — 7 sekme; dar mobilde yatay scroll ile erişim (rahat dokunma payı) */
+.top-tab { padding: 12px 14px; font-size: 13px; }
 
 /* --- Dashboard kartı --- */
 .dashboard-skor-card {

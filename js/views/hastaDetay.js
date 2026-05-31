@@ -15,7 +15,7 @@ import { confirm }         from '../components/modal.js';
 import { showToast }       from '../components/toast.js';
 import { formatTarih, gunFarki, bugun } from '../utils.js';
 import { renderAiPanel, attachAiListeners, resetAi, refreshAiGecmis, refreshAiDosyaInfo } from '../components/aiSorgu.js';
-import { renderTartismaPanel, attachTartismaListeners, resetTartisma } from '../components/vakaTartismasi.js';
+import { renderTartismaPanel, attachTartismaListeners, resetTartisma, refreshTartismaGecmis } from '../components/vakaTartismasi.js';
 import { topluLabTara, PARAM_META } from '../labDefteri/aiTarayici.js';
 import { updateLabDeger, deleteLabDeger, addYeniLabDeger } from '../labDefteri/labDefteriDb.js';
 
@@ -85,7 +85,8 @@ function _mount() {
       refreshAiDosyaInfo(_hastaId);
     }),
     subscribe('skorlar',   () => _refreshSection('hdSkorlarList', _renderSkorlarList)),
-    subscribe('aiSorgulari', () => _refreshAiTab())
+    subscribe('aiSorgulari', () => _refreshAiTab()),
+    subscribe('tartismalar', () => refreshTartismaGecmis())
   ];
 }
 

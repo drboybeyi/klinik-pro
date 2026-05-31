@@ -8,6 +8,7 @@ const _state = {
   tetkikler:     {},
   skorlar:       {},
   aiSorgulari:   {},
+  tartismalar:   {},
   ayarlar:       {},
   activeHastaId: null
 };

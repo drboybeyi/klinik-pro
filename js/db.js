@@ -11,13 +11,14 @@ let _uid = null;
 const _listeners = {};
 
 export function setCurrentUser(uid) { _uid = uid; }
+export function getUid() { return _uid; }
 
 function userRef(path) { return ref(db, `users/${_uid}/${path}`); }
 
 // --- Listeners ---
 
 export function startListeners() {
-  ['hastalar', 'tanilar', 'ilaclar', 'alerjiler', 'notlar', 'tetkikler', 'skorlar', 'aiSorgulari', 'ayarlar']
+  ['hastalar', 'tanilar', 'ilaclar', 'alerjiler', 'notlar', 'tetkikler', 'skorlar', 'aiSorgulari', 'tartismalar', 'ayarlar']
     .forEach(_listen);
 }
 
@@ -45,7 +46,7 @@ export async function updateHasta(id, data) {
 }
 
 export async function deleteHastaWithRelated(hastaId) {
-  const cols = ['tanilar', 'ilaclar', 'alerjiler', 'notlar', 'tetkikler', 'skorlar'];
+  const cols = ['tanilar', 'ilaclar', 'alerjiler', 'notlar', 'tetkikler', 'skorlar', 'tartismalar'];
   const deletes = [remove(userRef(`hastalar/${hastaId}`))];
   for (const col of cols) {
     const snap = await get(userRef(col));

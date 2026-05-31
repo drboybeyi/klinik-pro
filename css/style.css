@@ -2241,8 +2241,58 @@ body {
   margin-top: 8px;
   font-size: 11px;
   color: var(--text-secondary);
-  text-align: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
 }
+.tartisma-kayit-durum { color: var(--lab-normal, #5a7a3a); font-weight: 600; }
+
+/* Üst aksiyon barı (rozet + geçmiş/yeni) */
+.tartisma-ust {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.tartisma-ust-aksiyon { display: flex; gap: 12px; flex-shrink: 0; }
+
+/* Geçmiş tartışma listesi */
+.tartisma-gecmis-liste {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.tartisma-gecmis-bos {
+  font-size: 12px;
+  color: var(--text-secondary);
+  text-align: center;
+  padding: 8px;
+}
+.tartisma-gecmis-kart {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: border-color 120ms, background 120ms;
+}
+.tartisma-gecmis-kart:hover { border-color: var(--accent); background: #fffbf5; }
+.tartisma-gecmis-aktif { border-color: var(--accent); background: #fffbf5; }
+.tartisma-gecmis-baslik { font-size: 13px; font-weight: 600; color: var(--text-primary); }
+.tartisma-gecmis-tarih { font-size: 11px; color: var(--text-secondary); }
 
 /* ============== AI v0.3.5.1 — Streaming durumu ============== */
 
